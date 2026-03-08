@@ -1,0 +1,238 @@
+[
+    {
+        "nome_curso": "Administração Pública",
+        "url_curso": "https://www.ua.pt/pt/curso/54"
+    },
+    {
+        "nome_curso": "Automação e Sistemas de Produção",
+        "url_curso": "https://www.ua.pt/pt/curso/1626"
+    },
+    {
+        "nome_curso": "Biologia",
+        "url_curso": "https://www.ua.pt/pt/curso/14"
+    },
+    {
+        "nome_curso": "Biologia e Geologia",
+        "url_curso": "https://www.ua.pt/pt/curso/15"
+    },
+    {
+        "nome_curso": "Bioquímica",
+        "url_curso": "https://www.ua.pt/pt/curso/16"
+    },
+    {
+        "nome_curso": "Biotecnologia",
+        "url_curso": "https://www.ua.pt/pt/curso/17"
+    },
+    {
+        "nome_curso": "Ciências Biomédicas",
+        "url_curso": "https://www.ua.pt/pt/curso/18"
+    },
+    {
+        "nome_curso": "Ciências do Mar",
+        "url_curso": "https://www.ua.pt/pt/curso/19"
+    },
+    {
+        "nome_curso": "Contabilidade",
+        "url_curso": "https://www.ua.pt/pt/curso/48"
+    },
+    {
+        "nome_curso": "Contabilidade pós-laboral",
+        "url_curso": "https://www.ua.pt/pt/curso/448"
+    },
+    {
+        "nome_curso": "Design",
+        "url_curso": "https://www.ua.pt/pt/curso/20"
+    },
+    {
+        "nome_curso": "Design de Produto e Tecnologia",
+        "url_curso": "https://www.ua.pt/pt/curso/46"
+    },
+    {
+        "nome_curso": "Economia",
+        "url_curso": "https://www.ua.pt/pt/curso/21"
+    },
+    {
+        "nome_curso": "Educação Básica",
+        "url_curso": "https://www.ua.pt/pt/curso/94"
+    },
+    {
+        "nome_curso": "Eletrónica e Mecânica Industrial",
+        "url_curso": "https://www.ua.pt/pt/curso/465"
+    },
+    {
+        "nome_curso": "Enfermagem",
+        "url_curso": "https://www.ua.pt/pt/curso/168"
+    },
+    {
+        "nome_curso": "Engenharia Aeroespacial",
+        "url_curso": "https://www.ua.pt/pt/curso/514"
+    },
+    {
+        "nome_curso": "Engenharia Biomédica",
+        "url_curso": "https://www.ua.pt/pt/curso/478"
+    },
+    {
+        "nome_curso": "Engenharia Civil",
+        "url_curso": "https://www.ua.pt/pt/curso/491"
+    },
+    {
+        "nome_curso": "Engenharia Computacional",
+        "url_curso": "https://www.ua.pt/pt/curso/477"
+    },
+    {
+        "nome_curso": "Engenharia de Automação Industrial",
+        "url_curso": "https://www.ua.pt/pt/curso/470"
+    },
+    {
+        "nome_curso": "Engenharia de Computadores e Informática",
+        "url_curso": "https://www.ua.pt/pt/curso/486"
+    },
+    {
+        "nome_curso": "Engenharia de Materiais",
+        "url_curso": "https://www.ua.pt/pt/curso/483"
+    },
+    {
+        "nome_curso": "Engenharia de Software Industrial",
+        "url_curso": "https://www.ua.pt/pt/curso/1907"
+    },
+    {
+        "nome_curso": "Engenharia do Ambiente",
+        "url_curso": "https://www.ua.pt/pt/curso/484"
+    },
+    {
+        "nome_curso": "Engenharia e Gestão Industrial",
+        "url_curso": "https://www.ua.pt/pt/curso/481"
+    },
+    {
+        "nome_curso": "Engenharia Eletrotécnica e de Computadores",
+        "url_curso": "https://www.ua.pt/pt/curso/480"
+    },
+    {
+        "nome_curso": "Engenharia Física",
+        "url_curso": "https://www.ua.pt/pt/curso/485"
+    },
+    {
+        "nome_curso": "Engenharia Informática",
+        "url_curso": "https://www.ua.pt/pt/curso/383"
+    },
+    {
+        "nome_curso": "Engenharia Informática Aplicada",
+        "url_curso": "https://www.ua.pt/pt/curso/1732"
+    },
+    {
+        "nome_curso": "Engenharia Mecânica",
+        "url_curso": "https://www.ua.pt/pt/curso/482"
+    },
+    {
+        "nome_curso": "Engenharia Química",
+        "url_curso": "https://www.ua.pt/pt/curso/479"
+    },
+    {
+        "nome_curso": "Finanças",
+        "url_curso": "https://www.ua.pt/pt/curso/50"
+    },
+    {
+        "nome_curso": "Finanças pós-laboral",
+        "url_curso": "https://www.ua.pt/pt/curso/449"
+    },
+    {
+        "nome_curso": "Física",
+        "url_curso": "https://www.ua.pt/pt/curso/33"
+    },
+    {
+        "nome_curso": "Fisioterapia",
+        "url_curso": "https://www.ua.pt/pt/curso/170"
+    },
+    {
+        "nome_curso": "Geologia",
+        "url_curso": "https://www.ua.pt/pt/curso/418"
+    },
+    {
+        "nome_curso": "Gestão",
+        "url_curso": "https://www.ua.pt/pt/curso/34"
+    },
+    {
+        "nome_curso": "Gestão Comercial",
+        "url_curso": "https://www.ua.pt/pt/curso/64"
+    },
+    {
+        "nome_curso": "Gestão da Qualidade",
+        "url_curso": "https://www.ua.pt/pt/curso/222"
+    },
+    {
+        "nome_curso": "Gestão e Planeamento em Turismo",
+        "url_curso": "https://www.ua.pt/pt/curso/452"
+    },
+    {
+        "nome_curso": "Gestão Pública",
+        "url_curso": "https://www.ua.pt/pt/curso/65"
+    },
+    {
+        "nome_curso": "Imagem Médica e Radioterapia",
+        "url_curso": "https://www.ua.pt/pt/curso/406"
+    },
+    {
+        "nome_curso": "Línguas e Estudos Editoriais",
+        "url_curso": "https://www.ua.pt/pt/curso/35"
+    },
+    {
+        "nome_curso": "Línguas e Relações Empresariais",
+        "url_curso": "https://www.ua.pt/pt/curso/36"
+    },
+    {
+        "nome_curso": "Línguas, Literaturas e Culturas",
+        "url_curso": "https://www.ua.pt/pt/curso/37"
+    },
+    {
+        "nome_curso": "Marketing",
+        "url_curso": "https://www.ua.pt/pt/curso/51"
+    },
+    {
+        "nome_curso": "Marketing pós-laboral",
+        "url_curso": "https://www.ua.pt/pt/curso/447"
+    },
+    {
+        "nome_curso": "Matemática",
+        "url_curso": "https://www.ua.pt/pt/curso/38"
+    },
+    {
+        "nome_curso": "Matemática Aplicada e Computação",
+        "url_curso": "https://www.ua.pt/pt/curso/1908"
+    },
+    {
+        "nome_curso": "Medicina mestrado integrado",
+        "url_curso": "https://www.ua.pt/pt/curso/1731"
+    },
+    {
+        "nome_curso": "Meteorologia, Oceanografia e Clima",
+        "url_curso": "https://www.ua.pt/pt/curso/1625"
+    },
+    {
+        "nome_curso": "Multimédia e Tecnologias da Comunicação",
+        "url_curso": "https://www.ua.pt/pt/curso/1531"
+    },
+    {
+        "nome_curso": "Música",
+        "url_curso": "https://www.ua.pt/pt/curso/40"
+    },
+    {
+        "nome_curso": "Psicologia",
+        "url_curso": "https://www.ua.pt/pt/curso/42"
+    },
+    {
+        "nome_curso": "Química",
+        "url_curso": "https://www.ua.pt/pt/curso/43"
+    },
+    {
+        "nome_curso": "Secretariado e Comunicação Empresarial",
+        "url_curso": "https://www.ua.pt/pt/curso/66"
+    },
+    {
+        "nome_curso": "Terapia da Fala",
+        "url_curso": "https://www.ua.pt/pt/curso/174"
+    },
+    {
+        "nome_curso": "Tradução",
+        "url_curso": "https://www.ua.pt/pt/curso/44"
+    }
+]
