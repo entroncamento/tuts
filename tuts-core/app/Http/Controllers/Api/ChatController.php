@@ -7,18 +7,46 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use App\Models\Chat;
 use App\Models\Message;
-use App\Models\User; // Assumindo que o aluno está logado
+use App\Models\User;
 use App\Models\Subject;
-
 
 class ChatController extends Controller
 {
-    // 1. Rota para CRIAR um novo chat (quando o aluno entra na página)
+    // ==========================================
+    // FUNÇÃO AUXILIAR: Construir Histórico para o Python
+    // ==========================================
+    private function buildHistorico(int $chat_id): string
+    {
+        // Vai buscar as últimas 6 mensagens (3 perguntas + 3 respostas)
+        $msgs = Message::where('chat_id', $chat_id)
+            ->orderBy('created_at', 'desc') // Ordena da mais recente para a mais antiga para o limit
+            ->take(6)
+            ->get()
+            ->reverse() // Volta a colocar na ordem cronológica correta
+            ->values(); // Reseta os índices da coleção
+
+        // Mapeia para o formato que a IAedu/Python espera: [{"role": "user", "content": "..."}, ...]
+        $historicoFormatado = $msgs->map(function ($m) {
+            return [
+                // Garantir que a IAedu percebe os papéis (mapear 'ai' do Laravel para 'assistant' se necessário, ou manter 'ai')
+                'role'    => $m->role === 'ai' ? 'assistant' : 'user',
+                'content' => $m->content,
+            ];
+        });
+
+        return $historicoFormatado->toJson();
+    }
+
+    // ==========================================
+    // 1. ROTA: Criar um novo chat
+    // ==========================================
     public function criarChat(Request $request)
     {
-        // Para testes, vamos assumir o utilizador com ID 1 (ajusta se usares Auth real)
+        // 🌟 OTIMIZAÇÃO: Usar o utilizador autenticado via Sanctum/Passport
+        $user = $request->user() ?? User::find(1); // Fallback para ID 1 apenas para testes locais se não houver auth
+
         $chat = Chat::create([
-            'user_id' => 1,
+            'user_id' => $user->id,
             'title' => 'Nova Conversa com o STU'
         ]);
 
@@ -28,16 +56,20 @@ class ChatController extends Controller
         ]);
     }
 
-    // 2. Rota para ENVIAR a pergunta e GUARDAR no histórico
+    // ==========================================
+    // 2. ROTA: Enviar Pergunta (A Ponte Mágica)
+    // ==========================================
     public function enviarPergunta(Request $request)
     {
-        // Agora sim, exigimos que o chat exista na base de dados!
+        // Validação rigorosa dos dados que vêm do Frontend (Vue.js)
         $request->validate([
             'chat_id' => 'required|exists:chats,id',
-            'texto' => 'required|string'
+            'texto' => 'required|string',
+            'preferencia' => 'nullable|string|in:textual,visual' // 🌟 OTIMIZAÇÃO: Receber preferência do aluno
         ]);
 
-        $chat = Chat::findOrFail($request->chat_id);
+        // Carregar o chat e a UC (Subject) associada para dar contexto ao Python
+        $chat = Chat::with('subject')->findOrFail($request->chat_id);
 
         // A. Guardar a pergunta do Aluno na Base de Dados
         $mensagemAluno = Message::create([
@@ -46,12 +78,17 @@ class ChatController extends Controller
             'content' => $request->texto
         ]);
 
-        // B. Falar com o Python (A ponte mágica do Docker)
+        // B. Falar com o Python (O Motor de IA)
         $urlPython = 'http://host.docker.internal:8001/perguntar';
 
         try {
-            $respostaPython = Http::timeout(30)->post($urlPython, [
-                'texto' => $request->texto
+            // 🌟 OTIMIZAÇÃO: Timeout aumentado para 90s para dar margem de manobra ao Python e à IAedu
+            $respostaPython = Http::timeout(90)->post($urlPython, [
+                'texto'       => $request->texto,
+                'thread_id'   => (string) $chat->id, // 🌟 OTIMIZAÇÃO: Isolamento Multi-Tenant
+                'uc'          => $chat->subject->name ?? 'Geral', // 🌟 OTIMIZAÇÃO: Contexto rigoroso anti-alucinação
+                'preferencia' => $request->preferencia ?? 'textual', // 🌟 OTIMIZAÇÃO: Suporte a Mermaid.js
+                'historico'   => $this->buildHistorico($chat->id) // 🌟 OTIMIZAÇÃO: Expansão de Query
             ]);
 
             if ($respostaPython->successful()) {
@@ -60,7 +97,7 @@ class ChatController extends Controller
                 // C. Guardar a resposta da IA na Base de Dados
                 $mensagemIA = Message::create([
                     'chat_id' => $chat->id,
-                    'role' => 'ai', // <--- A MUDANÇA É AQUI! O STU chama-se tuts!
+                    'role' => 'ai',
                     'content' => $dadosIA['resposta_stu']
                 ]);
 
@@ -69,31 +106,35 @@ class ChatController extends Controller
                     'status' => 'sucesso',
                     'mensagem_aluno' => $mensagemAluno,
                     'mensagem_ia' => $mensagemIA,
+                    'query_expandida' => $dadosIA['query_expandida'] ?? null, // Útil para debug no frontend
                     'fontes' => $dadosIA['fontes_consultadas'] ?? []
                 ]);
             }
 
-            return response()->json(['erro' => 'O Python devolveu erro: ' . $respostaPython->status()], 500);
+            // 🌟 OTIMIZAÇÃO: Devolver o corpo do erro do Python (facilita muito o debug)
+            return response()->json([
+                'erro' => 'O serviço de IA devolveu um erro HTTP ' . $respostaPython->status(),
+                'detalhe' => $respostaPython->json() ?? $respostaPython->body()
+            ], $respostaPython->status());
         } catch (\Exception $e) {
             return response()->json([
-                'erro' => 'Falha de comunicação com o Python.',
+                'erro' => 'Falha de comunicação interna com o motor de Inteligência Artificial.',
                 'detalhe' => $e->getMessage()
             ], 500);
         }
     }
 
-    // 3. Rota para OBTER O HISTÓRICO de um chat
+    // ==========================================
+    // 3. ROTA: Obter o Histórico de um Chat
+    // ==========================================
     public function obterHistorico($chat_id)
     {
-        // 1. Verificar se o chat existe (se não existir, o Laravel devolve logo erro 404)
         $chat = Chat::findOrFail($chat_id);
 
-        // 2. Ir à tabela 'messages' buscar todas as mensagens deste chat, ordenadas da mais antiga para a mais recente
         $mensagens = Message::where('chat_id', $chat->id)
             ->orderBy('created_at', 'asc')
             ->get();
 
-        // 3. Devolver o histórico ao frontend
         return response()->json([
             'status' => 'sucesso',
             'chat_id' => $chat->id,
@@ -101,25 +142,26 @@ class ChatController extends Controller
             'mensagens' => $mensagens
         ]);
     }
-    public function listarChatsPorUC()
+
+    // ==========================================
+    // 4. ROTA: Listar as "Salas de Aula" (Chats por UC)
+    // ==========================================
+    public function listarChatsPorUC(Request $request)
     {
-        // 1. Aluno de teste (ID 1)
-        $user = \App\Models\User::find(1);
+        // 🌟 OTIMIZAÇÃO: Usar o utilizador autenticado
+        $user = $request->user() ?? User::find(1);
 
-        // 2. Vai buscar todas as UCs à tabela 'subjects'
-        $ucs = \App\Models\Subject::all();
-
+        $ucs = Subject::all();
         $chatsDoAluno = [];
 
-        // 3. Cria ou vai buscar o chat para cada UC
         foreach ($ucs as $uc) {
-            $chat = \App\Models\Chat::firstOrCreate(
+            $chat = Chat::firstOrCreate(
                 [
                     'user_id' => $user->id,
-                    'subject_id' => $uc->id // <-- Agora usamos subject_id!
+                    'subject_id' => $uc->id
                 ],
                 [
-                    'title' => 'Chat de ' . $uc->name // Assumindo que a coluna se chama 'name' na tabela subjects
+                    'title' => 'Chat de ' . $uc->name
                 ]
             );
 
