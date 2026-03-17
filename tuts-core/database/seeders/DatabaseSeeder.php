@@ -4,8 +4,10 @@ namespace Database\Seeders;
 
 use App\Models\Course;
 use App\Models\Subject;
+use App\Models\User;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Hash;
 
 class DatabaseSeeder extends Seeder
 {
@@ -18,10 +20,10 @@ class DatabaseSeeder extends Seeder
         $cursos = json_decode($jsonCursos, true);
 
         foreach ($cursos as $cursoData) {
-            Course::create([
-                'name' => $cursoData['nome_curso'],
-                'url' => $cursoData['url_curso']
-            ]);
+            Course::firstOrCreate(
+                ['name' => $cursoData['nome_curso']],
+                ['url' => $cursoData['url_curso']]
+            );
         }
         $this->command->info('✅ Cursos importados!');
 
@@ -34,18 +36,27 @@ class DatabaseSeeder extends Seeder
             $cadeiras = json_decode($jsonCadeiras, true);
 
             foreach ($cadeiras as $cadeiraData) {
-
                 // Procura se a cadeira já existe. Se não existir, cria-a na tabela subjects.
                 $subject = Subject::firstOrCreate(
                     ['name' => $cadeiraData['nome_uc']],
                     ['url' => $cadeiraData['url_uc']]
                 );
 
-                // A MAGIA: Liga a cadeira ao curso MTC na tabela pivot 'course_subject'
-                // syncWithoutDetaching garante que não duplica a ligação se já existir
+                // Liga a cadeira ao curso MTC na tabela pivot 'course_subject'
                 $cursoMtc->subjects()->syncWithoutDetaching([$subject->id]);
             }
             $this->command->info('✅ Cadeiras de MTC ligadas e importadas com sucesso!');
+
+            // 4. A MAGIA FINAL: Criar o Aluno de Teste (ID 1) e matriculá-lo em MTC!
+            User::firstOrCreate(
+                ['email' => 'aluno@ua.pt'],
+                [
+                    'name' => 'Aluno de Teste MTC',
+                    'password' => Hash::make('password123'),
+                    'course_id' => $cursoMtc->id // <-- Associa o aluno ao curso!
+                ]
+            );
+            $this->command->info('👨‍🎓 Aluno de teste matriculado em MTC!');
         }
     }
 }
