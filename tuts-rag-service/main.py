@@ -6,7 +6,6 @@ from slowapi.errors import RateLimitExceeded
 from slowapi import _rate_limit_exceeded_handler
 
 from config import settings, logger
-from database import init_db
 from core.ml_models import executor
 from routers.sistema import router as router_sistema
 from routers.professores import router as router_professores
@@ -14,9 +13,8 @@ from routers.alunos import router as router_alunos
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    init_db(settings.sqlite_db)
     app.state.http_client = httpx.AsyncClient()
-    logger.info("A API TUT'S está Online e Pronta!")
+    logger.info("A API TUT'S está Online e Pronta (Sem SQLite, a usar o Laravel como Base de Dados)!")
     yield
     await app.state.http_client.aclose()
     executor.shutdown(wait=True)
@@ -43,4 +41,5 @@ app.include_router(router_alunos)
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host=settings.server_host, port=settings.server_port)
+    # Mudar o host de settings.server_host (que devia ser 127.0.0.1) para "0.0.0.0"
+    uvicorn.run(app, host="0.0.0.0", port=settings.server_port)

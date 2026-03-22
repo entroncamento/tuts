@@ -3,9 +3,8 @@
         class="app-root flex h-screen font-sans transition-colors duration-300"
         :class="{ dark: isDark }"
     >
-        <!-- ═══════════════════════════════════════ SIDEBAR ═══════════════════════════════════════ -->
+        <!-- ═══════════════════════ SIDEBAR ═══════════════════════ -->
         <aside class="sidebar flex flex-col flex-shrink-0 z-10">
-            <!-- Logo -->
             <div class="sidebar-logo">
                 <div class="logo-icon">
                     <svg
@@ -29,7 +28,6 @@
                 </div>
             </div>
 
-            <!-- UC List -->
             <div class="sidebar-section-label">As Tuas Cadeiras</div>
             <nav class="sidebar-nav custom-scrollbar">
                 <button
@@ -47,7 +45,6 @@
                 </button>
             </nav>
 
-            <!-- Status Footer -->
             <div class="sidebar-footer">
                 <div class="api-status">
                     <span class="status-dot">
@@ -59,9 +56,8 @@
             </div>
         </aside>
 
-        <!-- ════════════════════════════════════════ MAIN ════════════════════════════════════════ -->
+        <!-- ═══════════════════════ MAIN ═══════════════════════ -->
         <div class="main-area flex flex-col flex-1 h-screen overflow-hidden">
-            <!-- Header -->
             <header class="app-header">
                 <div class="header-left">
                     <div class="breadcrumb-chip">A estudar</div>
@@ -69,7 +65,6 @@
                 </div>
 
                 <div class="header-right">
-                    <!-- Mode Selector -->
                     <div class="mode-selector">
                         <button
                             v-for="m in modos"
@@ -88,7 +83,6 @@
                         </button>
                     </div>
 
-                    <!-- Dark Mode Toggle -->
                     <button
                         @click="toggleDarkMode"
                         class="icon-btn"
@@ -124,7 +118,6 @@
                         </svg>
                     </button>
 
-                    <!-- Clear Chat -->
                     <button
                         @click="limparChat"
                         class="icon-btn"
@@ -147,8 +140,11 @@
                 </div>
             </header>
 
-            <!-- Chat Area -->
-            <main class="chat-area custom-scrollbar" ref="chatContainer">
+            <main
+                class="chat-area custom-scrollbar"
+                ref="chatContainer"
+                @scroll="onScroll"
+            >
                 <!-- Welcome State -->
                 <div v-if="mensagens.length === 0" class="welcome-state">
                     <div class="welcome-orb"></div>
@@ -178,7 +174,6 @@
                         msg.role === 'user' ? 'msg-row--user' : 'msg-row--ai',
                     ]"
                 >
-                    <!-- AI Avatar -->
                     <div
                         v-if="msg.role === 'ai'"
                         class="msg-avatar msg-avatar--ai"
@@ -187,6 +182,27 @@
                     </div>
 
                     <div class="msg-content-wrap">
+                        <div v-if="msg.semContexto" class="no-context-alert">
+                            <svg
+                                class="w-4 h-4 flex-shrink-0"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                            >
+                                <path
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                    stroke-width="2"
+                                    d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                                />
+                            </svg>
+                            <span
+                                ><strong>Atenção:</strong> Não encontrei
+                                informação sobre isto nos PDFs da UC. A resposta
+                                usa conhecimento geral.</span
+                            >
+                        </div>
+
                         <div
                             :class="[
                                 'msg-bubble',
@@ -204,54 +220,80 @@
                             </div>
                             <div
                                 class="prose-content"
-                                :class="
+                                :class="[
                                     msg.role === 'user'
                                         ? 'prose-user'
-                                        : 'prose-ai'
-                                "
+                                        : 'prose-ai',
+                                    aCarregar && index === indiceAtivo
+                                        ? 'streaming-cursor'
+                                        : '',
+                                ]"
                                 v-html="renderMarkdown(msg.content)"
                             ></div>
                         </div>
 
-                        <!-- Copy button for AI -->
-                        <button
-                            v-if="msg.role === 'ai'"
-                            @click="copiarMensagem(msg.content, index)"
-                            class="copy-btn"
-                            :title="copiado === index ? 'Copiado!' : 'Copiar'"
+                        <div
+                            v-if="msg.sugestoes && msg.sugestoes.length > 0"
+                            class="ai-suggestions-wrap"
                         >
-                            <svg
-                                v-if="copiado !== index"
-                                class="w-3.5 h-3.5"
-                                fill="none"
-                                stroke="currentColor"
-                                viewBox="0 0 24 24"
+                            <button
+                                v-for="(sugestao, sIdx) in msg.sugestoes"
+                                :key="sIdx"
+                                @click="usarSugestao(sugestao)"
+                                class="ai-suggestion-chip"
                             >
-                                <path
-                                    stroke-linecap="round"
-                                    stroke-linejoin="round"
-                                    stroke-width="2"
-                                    d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
-                                />
-                            </svg>
-                            <svg
-                                v-else
-                                class="w-3.5 h-3.5 text-green-500"
-                                fill="none"
-                                stroke="currentColor"
-                                viewBox="0 0 24 24"
+                                ✨ {{ sugestao }}
+                            </button>
+                        </div>
+
+                        <div class="msg-meta">
+                            <span class="msg-time">{{
+                                formatarHora(msg.hora)
+                            }}</span>
+                            <button
+                                v-if="msg.role === 'ai' && msg.content"
+                                @click="copiarMensagem(msg.content, index)"
+                                class="copy-btn"
+                                :title="
+                                    copiado === index ? 'Copiado!' : 'Copiar'
+                                "
                             >
-                                <path
-                                    stroke-linecap="round"
-                                    stroke-linejoin="round"
-                                    stroke-width="2"
-                                    d="M5 13l4 4L19 7"
-                                />
-                            </svg>
-                        </button>
+                                <svg
+                                    v-if="copiado !== index"
+                                    class="w-3.5 h-3.5"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                >
+                                    <path
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                        stroke-width="2"
+                                        d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                                    />
+                                </svg>
+                                <svg
+                                    v-else
+                                    class="w-3.5 h-3.5"
+                                    style="color: #22c55e"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                >
+                                    <path
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                        stroke-width="2"
+                                        d="M5 13l4 4L19 7"
+                                    />
+                                </svg>
+                                <span>{{
+                                    copiado === index ? "Copiado!" : "Copiar"
+                                }}</span>
+                            </button>
+                        </div>
                     </div>
 
-                    <!-- User Avatar -->
                     <div
                         v-if="msg.role === 'user'"
                         class="msg-avatar msg-avatar--user"
@@ -259,7 +301,7 @@
                         U
                     </div>
 
-                    <!-- Quiz Cards -->
+                    <!-- Quiz -->
                     <div
                         v-if="msg.quiz && msg.quiz.length > 0"
                         class="quiz-container"
@@ -267,9 +309,7 @@
                         <div class="quiz-header">
                             <span class="quiz-badge">🎮 Quiz Interativo</span>
                             <span class="quiz-score" v-if="quizFinalizado(msg)">
-                                {{ pontuacaoQuiz(msg) }}/{{
-                                    msg.quiz.length
-                                }}
+                                {{ pontuacaoQuiz(msg) }}/{{ msg.quiz.length }}
                                 corretas
                             </span>
                         </div>
@@ -331,20 +371,53 @@
                     </div>
                 </div>
 
-                <!-- Loading Indicator -->
-                <div v-if="aCarregar" class="msg-row msg-row--ai">
+                <!-- ✅ Typing Indicator com mensagens de estado -->
+                <div
+                    v-if="aCarregar && indiceAtivo === -1"
+                    class="msg-row msg-row--ai"
+                >
                     <div class="msg-avatar msg-avatar--ai">T</div>
                     <div class="typing-bubble">
-                        <span class="typing-dot"></span>
-                        <span class="typing-dot"></span>
-                        <span class="typing-dot"></span>
+                        <template v-if="statusMsg">
+                            <!-- Ícone de spinner + texto do status -->
+                            <span class="status-spinner"></span>
+                            <span class="status-msg-text">{{ statusMsg }}</span>
+                        </template>
+                        <template v-else>
+                            <span class="typing-dot"></span>
+                            <span class="typing-dot"></span>
+                            <span class="typing-dot"></span>
+                        </template>
                     </div>
                 </div>
             </main>
 
-            <!-- Input Footer -->
+            <!-- FAB scroll to bottom -->
+            <Transition name="fab">
+                <button
+                    v-if="mostrarScrollBtn"
+                    @click="scrollToBottom"
+                    class="scroll-fab"
+                    title="Ir para o fundo"
+                >
+                    <svg
+                        class="w-4 h-4"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                    >
+                        <path
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-width="2.5"
+                            d="M19 9l-7 7-7-7"
+                        />
+                    </svg>
+                </button>
+            </Transition>
+
+            <!-- Footer -->
             <footer class="app-footer">
-                <!-- Image Preview -->
                 <div v-if="imagemPreview" class="image-preview-wrap">
                     <img :src="imagemPreview" class="image-preview-thumb" />
                     <button @click="removerImagem" class="image-preview-remove">
@@ -378,18 +451,19 @@
                     <textarea
                         v-model="mensagemAtual"
                         @keydown.enter.exact.prevent="enviarMensagem"
-                        @keydown.shift.enter="novaLinha"
                         @input="autoResize"
                         ref="textareaRef"
                         rows="1"
-                        placeholder="Faz uma pergunta... (Enter para enviar, Shift+Enter para nova linha)"
+                        placeholder="Faz uma pergunta... (Enter envia, Shift+Enter nova linha)"
                         class="chat-textarea"
                     ></textarea>
 
                     <div class="input-right">
-                        <span class="char-hint" v-if="mensagemAtual.length > 0">
-                            {{ mensagemAtual.length }}
-                        </span>
+                        <span
+                            class="char-hint"
+                            v-if="mensagemAtual.length > 0"
+                            >{{ mensagemAtual.length }}</span
+                        >
                         <button
                             @click="enviarMensagem"
                             :disabled="
@@ -419,8 +493,8 @@
                     </div>
                 </div>
                 <p class="input-hint">
-                    Modo atual: <strong>{{ modoAtual?.label }}</strong> · Enter
-                    envia · Shift+Enter nova linha
+                    Modo: <strong>{{ modoAtual?.label }}</strong> · Enter envia
+                    · Shift+Enter nova linha
                 </p>
             </footer>
         </div>
@@ -429,7 +503,6 @@
 
 <script setup>
 import { ref, nextTick, onMounted, computed } from "vue";
-import axios from "axios";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
 import mermaid from "mermaid";
@@ -458,11 +531,14 @@ const threadId = ref(crypto.randomUUID());
 const ucAtual = ref(listaUCs.value[0] || "Nenhuma UC encontrada");
 const isDark = ref(false);
 const copiado = ref(null);
+const mostrarScrollBtn = ref(false);
+const indiceAtivo = ref(-1);
+// ✅ Mensagem de estado do processamento
+const statusMsg = ref("");
 
 const modoAtual = computed(() =>
     modos.find((m) => m.value === preferencia.value),
 );
-
 const sugestoes = computed(() => [
     `Explica os conceitos base de ${ucAtual.value}`,
     `Cria um resumo dos tópicos mais importantes`,
@@ -470,15 +546,33 @@ const sugestoes = computed(() => [
     `Qual é o melhor plano de estudo?`,
 ]);
 
+function scrollToBottom() {
+    if (chatContainer.value)
+        chatContainer.value.scrollTop = chatContainer.value.scrollHeight;
+}
+
+const onScroll = () => {
+    const el = chatContainer.value;
+    if (!el) return;
+    mostrarScrollBtn.value =
+        el.scrollHeight - el.scrollTop - el.clientHeight > 120;
+};
+
+const formatarHora = (d) =>
+    d?.toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" }) ??
+    "";
+
 const selecionarUC = (novaUC) => {
     if (ucAtual.value === novaUC) return;
     ucAtual.value = novaUC;
     mensagens.value = [];
+    statusMsg.value = "";
     threadId.value = crypto.randomUUID();
 };
 
 const limparChat = () => {
     mensagens.value = [];
+    statusMsg.value = "";
     threadId.value = crypto.randomUUID();
 };
 
@@ -515,10 +609,6 @@ const removerImagem = () => {
     imagemPreview.value = null;
 };
 
-const novaLinha = () => {
-    // Shift+Enter: add newline naturally (default behavior kept)
-};
-
 const autoResize = () => {
     const el = textareaRef.value;
     if (!el) return;
@@ -532,19 +622,15 @@ const copiarMensagem = async (content, index) => {
     setTimeout(() => (copiado.value = null), 2000);
 };
 
-// Quiz helpers
 const responderQuiz = (msg, perguntaIndex, opcaoIndex) => {
     msg.respostas[perguntaIndex] = opcaoIndex;
 };
-
 const quizFinalizado = (msg) =>
     msg.quiz &&
     msg.respostas &&
     msg.respostas.filter((r) => r !== undefined).length === msg.quiz.length;
-
 const pontuacaoQuiz = (msg) =>
     msg.respostas.filter((r, i) => r === msg.quiz[i].correta).length;
-
 const getQuizButtonClass = (msg, qIndex, oIndex) => {
     const respondido = msg.respostas[qIndex] !== undefined;
     const correta = msg.quiz[qIndex].correta;
@@ -591,84 +677,150 @@ const enviarMensagem = async () => {
     const textoUser = mensagemAtual.value;
     const imgUser = imagemPreview.value;
 
-    mensagens.value.push({ role: "user", content: textoUser, imagem: imgUser });
+    mensagens.value.push({
+        role: "user",
+        content: textoUser,
+        imagem: imgUser,
+        hora: new Date(),
+    });
     mensagemAtual.value = "";
     if (textareaRef.value) textareaRef.value.style.height = "auto";
-    aCarregar.value = true;
 
+    mensagens.value.push({
+        role: "ai",
+        content: "",
+        sugestoes: [],
+        semContexto: false,
+        quiz: null,
+        respostas: [],
+        hora: new Date(),
+    });
+    const indiceIA = mensagens.value.length - 1;
+    indiceAtivo.value = -1;
+    statusMsg.value = "";
+
+    aCarregar.value = true;
     await nextTick();
     scrollToBottom();
 
     const formData = new FormData();
     formData.append("texto", textoUser || "Analisa a imagem em anexo.");
-    formData.append("thread_id", threadId.value);
     formData.append("uc", ucAtual.value);
     formData.append("preferencia", preferencia.value);
-    formData.append("historico", JSON.stringify([]));
     if (imagemFicheiro.value) formData.append("imagem", imagemFicheiro.value);
     removerImagem();
 
     try {
-        const resposta = await axios.post(
-            "http://127.0.0.1:8001/perguntar",
-            formData,
-            {
-                headers: { "Content-Type": "multipart/form-data" },
+        const resposta = await fetch("/api/chat/stream", {
+            method: "POST",
+            body: formData,
+            headers: {
+                "X-Requested-With": "XMLHttpRequest",
+                Accept: "text/event-stream",
             },
+        });
+
+        if (!resposta.ok) throw new Error(`HTTP ${resposta.status}`);
+
+        const reader = resposta.body.getReader();
+        const decoder = new TextDecoder("utf-8");
+        let buffer = "";
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const partes = buffer.split("\n");
+            buffer = partes.pop();
+
+            for (let parte of partes) {
+                parte = parte.trim();
+                if (!parte.startsWith("data: ")) continue;
+
+                const jsonStr = parte.substring(6).trim();
+                if (jsonStr === "[DONE]") continue;
+
+                try {
+                    const data = JSON.parse(jsonStr);
+
+                    // ✅ Actualizar flag sem_contexto
+                    if (data.sem_contexto !== undefined)
+                        mensagens.value[indiceIA].semContexto =
+                            data.sem_contexto;
+
+                    // ✅ Mostrar mensagem de estado no typing bubble
+                    if (data.status_msg) {
+                        statusMsg.value = data.status_msg;
+                        scrollToBottom();
+                    }
+
+                    // ✅ Primeiro chunk — limpa status, ativa cursor piscante
+                    // ✅ DEPOIS — transita SEMPRE no primeiro chunk
+                    if (data.chunk) {
+                        statusMsg.value = ""; // limpa o status
+                        indiceAtivo.value = indiceIA; // activa o cursor piscante
+                        // NÃO pôr aCarregar=false aqui — o cursor precisa que seja true
+                        mensagens.value[indiceIA].content += data.chunk;
+                        scrollToBottom();
+                    }
+                } catch (e) {
+                    /* JSON incompleto — ignorar */
+                }
+            }
+        }
+
+        indiceAtivo.value = -1;
+        statusMsg.value = "";
+
+        let textoIA = mensagens.value[indiceIA].content;
+
+        const sugestoesMatch = textoIA.match(
+            /\[SUGESTOES\]([\s\S]*?)\[\/SUGESTOES\]/,
         );
-
-        if (resposta.data.thread_id) threadId.value = resposta.data.thread_id;
-
-        let textoIA =
-            resposta.data.resposta_stu ||
-            resposta.data.mensagem ||
-            "⚠️ Resposta não reconhecida.";
-        let quizData = null;
+        if (sugestoesMatch) {
+            mensagens.value[indiceIA].sugestoes = sugestoesMatch[1]
+                .split("|")
+                .map((s) => s.trim())
+                .filter((s) => s);
+            textoIA = textoIA
+                .replace(/\[SUGESTOES\][\s\S]*?\[\/SUGESTOES\]/, "")
+                .trim();
+        }
 
         const quizMatch = textoIA.match(/\[QUIZ\]([\s\S]*?)\[\/QUIZ\]/);
         if (quizMatch) {
             try {
-                quizData = JSON.parse(quizMatch[1].trim());
+                const qData = JSON.parse(quizMatch[1].trim());
+                mensagens.value[indiceIA].quiz = qData;
+                mensagens.value[indiceIA].respostas = new Array(qData.length);
                 textoIA = textoIA
                     .replace(/\[QUIZ\][\s\S]*?\[\/QUIZ\]/, "")
                     .trim();
             } catch (e) {
-                console.error("Quiz parse error:", e);
+                /* JSON inválido */
             }
         }
 
-        mensagens.value.push({
-            role: "ai",
-            content: textoIA,
-            quiz: quizData,
-            respostas: quizData ? new Array(quizData.length) : [],
-        });
-
+        mensagens.value[indiceIA].content = textoIA;
         await desenharGraficos();
     } catch (error) {
-        mensagens.value.push({
-            role: "ai",
-            content:
-                "❌ Erro de comunicação com o Backend. Confirma que a API está em execução na porta 8001.",
-        });
+        indiceAtivo.value = -1;
+        statusMsg.value = "";
+        mensagens.value[indiceIA].content = `❌ Erro: ${error.message}`;
     } finally {
         aCarregar.value = false;
+        indiceAtivo.value = -1;
+        statusMsg.value = "";
         await nextTick();
         scrollToBottom();
     }
 };
-
-const scrollToBottom = () => {
-    if (chatContainer.value)
-        chatContainer.value.scrollTop = chatContainer.value.scrollHeight;
-};
 </script>
 
 <style>
-/* ─── Google Fonts ─── */
 @import url("https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=Instrument+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap");
 
-/* ─── CSS Variables ─── */
 :root {
     --c-bg: #f7f6f3;
     --c-surface: #ffffff;
@@ -682,15 +834,14 @@ const scrollToBottom = () => {
     --c-accent-l: #eae8fc;
     --c-accent2: #e8a24f;
     --c-user-bg: #1a1916;
-    --c-user-text: #f7f6f3;
+    --c-user-txt: #f7f6f3;
     --sidebar-w: 260px;
     --radius: 14px;
     --shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 4px 16px rgba(0, 0, 0, 0.04);
-    --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.1);
+    --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.12);
     --font-head: "Syne", sans-serif;
     --font-body: "Instrument Sans", sans-serif;
 }
-
 .dark {
     --c-bg: #111110;
     --c-surface: #1c1b1a;
@@ -704,16 +855,14 @@ const scrollToBottom = () => {
     --c-accent-l: #1e1c3a;
     --c-accent2: #d4924a;
     --c-user-bg: #7b6ff0;
-    --c-user-text: #ffffff;
+    --c-user-txt: #ffffff;
 }
 
-/* ─── Base ─── */
 * {
     box-sizing: border-box;
     margin: 0;
     padding: 0;
 }
-
 .app-root {
     background: var(--c-bg);
     color: var(--c-text);
@@ -721,8 +870,6 @@ const scrollToBottom = () => {
     font-size: 14px;
     line-height: 1.6;
 }
-
-/* ─── Scrollbar ─── */
 .custom-scrollbar::-webkit-scrollbar {
     width: 5px;
 }
@@ -734,7 +881,7 @@ const scrollToBottom = () => {
     border-radius: 20px;
 }
 
-/* ─── SIDEBAR ─── */
+/* Sidebar */
 .sidebar {
     width: var(--sidebar-w);
     background: var(--c-surface);
@@ -745,7 +892,6 @@ const scrollToBottom = () => {
         background 0.3s,
         border-color 0.3s;
 }
-
 .sidebar-logo {
     display: flex;
     align-items: center;
@@ -753,7 +899,6 @@ const scrollToBottom = () => {
     padding: 20px 20px 18px;
     border-bottom: 1px solid var(--c-border);
 }
-
 .logo-icon {
     width: 36px;
     height: 36px;
@@ -766,7 +911,6 @@ const scrollToBottom = () => {
     flex-shrink: 0;
     box-shadow: 0 2px 8px rgba(91, 79, 232, 0.35);
 }
-
 .logo-title {
     font-family: var(--font-head);
     font-size: 16px;
@@ -774,14 +918,12 @@ const scrollToBottom = () => {
     color: var(--c-text);
     line-height: 1.1;
 }
-
 .logo-subtitle {
     font-size: 11px;
     color: var(--c-text3);
     font-weight: 500;
     letter-spacing: 0.03em;
 }
-
 .sidebar-section-label {
     font-size: 10px;
     font-weight: 600;
@@ -790,7 +932,6 @@ const scrollToBottom = () => {
     color: var(--c-text3);
     padding: 16px 20px 8px;
 }
-
 .sidebar-nav {
     flex: 1;
     overflow-y: auto;
@@ -799,7 +940,6 @@ const scrollToBottom = () => {
     flex-direction: column;
     gap: 2px;
 }
-
 .uc-btn {
     display: flex;
     align-items: center;
@@ -816,20 +956,16 @@ const scrollToBottom = () => {
     font-family: var(--font-body);
     font-size: 13px;
     font-weight: 500;
-    position: relative;
 }
-
 .uc-btn:hover {
     background: var(--c-surface2);
     color: var(--c-text);
 }
-
 .uc-btn--active {
     background: var(--c-accent-l);
     border-color: color-mix(in srgb, var(--c-accent) 25%, transparent);
     color: var(--c-accent);
 }
-
 .uc-icon {
     font-size: 15px;
     flex-shrink: 0;
@@ -847,12 +983,10 @@ const scrollToBottom = () => {
     background: var(--c-accent);
     flex-shrink: 0;
 }
-
 .sidebar-footer {
     padding: 14px 20px;
     border-top: 1px solid var(--c-border);
 }
-
 .api-status {
     display: flex;
     align-items: center;
@@ -861,7 +995,6 @@ const scrollToBottom = () => {
     color: var(--c-text3);
     font-weight: 500;
 }
-
 .status-dot {
     position: relative;
     display: flex;
@@ -883,7 +1016,6 @@ const scrollToBottom = () => {
     border-radius: 50%;
     background: #22c55e;
 }
-
 @keyframes ping {
     0% {
         transform: scale(1);
@@ -896,13 +1028,11 @@ const scrollToBottom = () => {
     }
 }
 
-/* ─── MAIN AREA ─── */
+/* Header */
 .main-area {
     background: var(--c-bg);
     transition: background 0.3s;
 }
-
-/* ─── HEADER ─── */
 .app-header {
     display: flex;
     align-items: center;
@@ -918,14 +1048,12 @@ const scrollToBottom = () => {
         background 0.3s,
         border-color 0.3s;
 }
-
 .header-left {
     display: flex;
     align-items: center;
     gap: 10px;
     min-width: 0;
 }
-
 .breadcrumb-chip {
     font-size: 11px;
     font-weight: 600;
@@ -938,7 +1066,6 @@ const scrollToBottom = () => {
     text-transform: uppercase;
     letter-spacing: 0.05em;
 }
-
 .header-uc-name {
     font-family: var(--font-head);
     font-size: 15px;
@@ -948,15 +1075,12 @@ const scrollToBottom = () => {
     text-overflow: ellipsis;
     white-space: nowrap;
 }
-
 .header-right {
     display: flex;
     align-items: center;
     gap: 10px;
     flex-shrink: 0;
 }
-
-/* Mode Selector */
 .mode-selector {
     display: flex;
     align-items: center;
@@ -966,7 +1090,6 @@ const scrollToBottom = () => {
     border-radius: 10px;
     padding: 3px;
 }
-
 .mode-btn {
     display: flex;
     align-items: center;
@@ -983,26 +1106,21 @@ const scrollToBottom = () => {
     transition: all 0.15s ease;
     white-space: nowrap;
 }
-
 .mode-btn:hover {
     color: var(--c-text);
     background: var(--c-surface);
 }
-
 .mode-btn--active {
     background: var(--c-surface);
     color: var(--c-accent);
     box-shadow: var(--shadow);
 }
-
 .mode-icon {
     font-size: 13px;
 }
 .mode-label {
     font-size: 12px;
 }
-
-/* Icon Buttons */
 .icon-btn {
     width: 34px;
     height: 34px;
@@ -1022,7 +1140,7 @@ const scrollToBottom = () => {
     background: var(--c-surface2);
 }
 
-/* ─── CHAT AREA ─── */
+/* Chat */
 .chat-area {
     flex: 1;
     overflow-y: auto;
@@ -1030,9 +1148,10 @@ const scrollToBottom = () => {
     display: flex;
     flex-direction: column;
     gap: 20px;
+    position: relative;
 }
 
-/* ─── WELCOME STATE ─── */
+/* Welcome */
 .welcome-state {
     display: flex;
     flex-direction: column;
@@ -1042,9 +1161,7 @@ const scrollToBottom = () => {
     padding: 60px 24px;
     flex: 1;
     gap: 16px;
-    position: relative;
 }
-
 .welcome-orb {
     width: 80px;
     height: 80px;
@@ -1058,7 +1175,6 @@ const scrollToBottom = () => {
     margin-bottom: 8px;
     animation: float 3s ease-in-out infinite;
 }
-
 @keyframes float {
     0%,
     100% {
@@ -1068,21 +1184,18 @@ const scrollToBottom = () => {
         transform: translateY(-8px);
     }
 }
-
 .welcome-title {
     font-family: var(--font-head);
     font-size: 22px;
     font-weight: 700;
     color: var(--c-text);
 }
-
 .welcome-subtitle {
     font-size: 14px;
     color: var(--c-text2);
     max-width: 380px;
     line-height: 1.6;
 }
-
 .suggestions {
     display: flex;
     flex-wrap: wrap;
@@ -1091,7 +1204,6 @@ const scrollToBottom = () => {
     margin-top: 8px;
     max-width: 520px;
 }
-
 .suggestion-chip {
     padding: 8px 16px;
     border-radius: 20px;
@@ -1104,21 +1216,19 @@ const scrollToBottom = () => {
     transition: all 0.15s ease;
     font-weight: 500;
 }
-
 .suggestion-chip:hover {
     border-color: var(--c-accent);
     color: var(--c-accent);
     background: var(--c-accent-l);
 }
 
-/* ─── MESSAGES ─── */
+/* Mensagens */
 .msg-row {
     display: flex;
     align-items: flex-end;
     gap: 10px;
     animation: msgIn 0.2s ease-out;
 }
-
 @keyframes msgIn {
     from {
         opacity: 0;
@@ -1129,7 +1239,6 @@ const scrollToBottom = () => {
         transform: translateY(0);
     }
 }
-
 .msg-row--user {
     flex-direction: row-reverse;
 }
@@ -1137,7 +1246,6 @@ const scrollToBottom = () => {
     flex-direction: row;
     flex-wrap: wrap;
 }
-
 .msg-avatar {
     width: 30px;
     height: 30px;
@@ -1148,49 +1256,41 @@ const scrollToBottom = () => {
     font-size: 11px;
     font-weight: 700;
     flex-shrink: 0;
-    letter-spacing: 0.01em;
 }
-
 .msg-avatar--ai {
     background: var(--c-accent);
     color: white;
     box-shadow: 0 2px 8px color-mix(in srgb, var(--c-accent) 40%, transparent);
 }
-
 .msg-avatar--user {
     background: var(--c-surface2);
     color: var(--c-text2);
     border: 1px solid var(--c-border);
 }
-
 .msg-content-wrap {
     display: flex;
     flex-direction: column;
     gap: 4px;
     max-width: min(78%, 720px);
 }
-
 .msg-row--user .msg-content-wrap {
     align-items: flex-end;
 }
 .msg-row--ai .msg-content-wrap {
     align-items: flex-start;
 }
-
 .msg-bubble {
     padding: 12px 16px;
     border-radius: 16px;
     word-break: break-word;
     transition: background 0.2s;
 }
-
 .msg-bubble--user {
     background: var(--c-user-bg);
-    color: var(--c-user-text);
+    color: var(--c-user-txt);
     border-bottom-right-radius: 4px;
     box-shadow: var(--shadow);
 }
-
 .msg-bubble--ai {
     background: var(--c-surface);
     color: var(--c-text);
@@ -1198,7 +1298,6 @@ const scrollToBottom = () => {
     border-bottom-left-radius: 4px;
     box-shadow: var(--shadow);
 }
-
 .msg-image-wrap {
     margin-bottom: 10px;
 }
@@ -1208,44 +1307,117 @@ const scrollToBottom = () => {
     border: 1px solid var(--c-border);
 }
 
+.msg-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+    padding: 0 2px;
+}
+.msg-row:hover .msg-meta {
+    opacity: 1;
+}
+.msg-time {
+    font-size: 10px;
+    color: var(--c-text3);
+}
 .copy-btn {
-    align-self: flex-start;
-    padding: 4px 8px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
     border-radius: 6px;
     border: 1px solid var(--c-border);
     background: var(--c-surface);
     color: var(--c-text3);
     cursor: pointer;
-    display: flex;
-    align-items: center;
-    gap: 4px;
     font-size: 11px;
     font-weight: 500;
     transition: all 0.15s ease;
-    opacity: 0;
-}
-
-.msg-row:hover .copy-btn {
-    opacity: 1;
 }
 .copy-btn:hover {
     color: var(--c-text);
     border-color: var(--c-border2);
 }
 
-/* ─── TYPING INDICATOR ─── */
+@keyframes blink {
+    0%,
+    100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0;
+    }
+}
+.streaming-cursor::after {
+    content: "▋";
+    display: inline-block;
+    color: var(--c-accent);
+    animation: blink 0.8s step-end infinite;
+    margin-left: 2px;
+    font-size: 0.9em;
+}
+
+/* Alerta sem contexto */
+.no-context-alert {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    background: #fef9c3;
+    border: 1px solid #fde047;
+    color: #854d0e;
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 13px;
+    line-height: 1.5;
+    margin-bottom: 8px;
+}
+.dark .no-context-alert {
+    background: rgba(234, 179, 8, 0.1);
+    border-color: rgba(234, 179, 8, 0.3);
+    color: #fde047;
+}
+
+/* Sugestões */
+.ai-suggestions-wrap {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+}
+.ai-suggestion-chip {
+    padding: 6px 12px;
+    border-radius: 16px;
+    border: 1px solid var(--c-accent);
+    background: transparent;
+    color: var(--c-accent);
+    font-family: var(--font-body);
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-weight: 500;
+}
+.ai-suggestion-chip:hover {
+    background: var(--c-accent);
+    color: white;
+}
+
+/* ✅ Typing bubble — dots + status */
 .typing-bubble {
     display: flex;
     align-items: center;
-    gap: 5px;
+    gap: 8px;
     background: var(--c-surface);
     border: 1px solid var(--c-border);
     border-radius: 16px;
     border-bottom-left-radius: 4px;
-    padding: 14px 18px;
+    padding: 13px 18px;
     box-shadow: var(--shadow);
+    min-width: 60px;
+    max-width: 340px;
+    transition: all 0.2s ease;
 }
-
 .typing-dot {
     width: 7px;
     height: 7px;
@@ -1259,7 +1431,6 @@ const scrollToBottom = () => {
 .typing-dot:nth-child(3) {
     animation-delay: 0.3s;
 }
-
 @keyframes typingBounce {
     0%,
     60%,
@@ -1273,7 +1444,79 @@ const scrollToBottom = () => {
     }
 }
 
-/* ─── QUIZ ─── */
+/* ✅ Spinner + texto de status */
+.status-spinner {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    border: 2px solid color-mix(in srgb, var(--c-accent) 25%, transparent);
+    border-top-color: var(--c-accent);
+    animation: spin 0.7s linear infinite;
+}
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.status-msg-text {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--c-text2);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    animation: statusFade 0.3s ease-out;
+}
+@keyframes statusFade {
+    from {
+        opacity: 0;
+        transform: translateX(-4px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+/* FAB */
+.scroll-fab {
+    position: fixed;
+    bottom: 100px;
+    right: 28px;
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    background: var(--c-surface);
+    color: var(--c-text2);
+    border: 1px solid var(--c-border);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: var(--shadow-lg);
+    transition: all 0.15s ease;
+    z-index: 50;
+}
+.scroll-fab:hover {
+    background: var(--c-accent);
+    color: white;
+    border-color: var(--c-accent);
+}
+.fab-enter-active,
+.fab-leave-active {
+    transition:
+        opacity 0.2s,
+        transform 0.2s;
+}
+.fab-enter-from,
+.fab-leave-to {
+    opacity: 0;
+    transform: translateY(8px);
+}
+
+/* Quiz */
 .quiz-container {
     width: 100%;
     margin-top: 12px;
@@ -1281,13 +1524,11 @@ const scrollToBottom = () => {
     flex-direction: column;
     gap: 12px;
 }
-
 .quiz-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
 }
-
 .quiz-badge {
     font-size: 12px;
     font-weight: 600;
@@ -1297,22 +1538,18 @@ const scrollToBottom = () => {
     color: var(--c-accent);
     border: 1px solid color-mix(in srgb, var(--c-accent) 20%, transparent);
 }
-
 .quiz-score {
     font-size: 12px;
     font-weight: 600;
     color: var(--c-text2);
 }
-
 .quiz-card {
     background: var(--c-surface);
     border: 1px solid var(--c-border);
     border-radius: var(--radius);
     padding: 18px 20px;
     box-shadow: var(--shadow);
-    transition: background 0.2s;
 }
-
 .quiz-question {
     font-weight: 600;
     color: var(--c-text);
@@ -1322,7 +1559,6 @@ const scrollToBottom = () => {
     gap: 10px;
     align-items: flex-start;
 }
-
 .quiz-q-num {
     display: flex;
     align-items: center;
@@ -1337,13 +1573,11 @@ const scrollToBottom = () => {
     flex-shrink: 0;
     margin-top: 1px;
 }
-
 .quiz-options {
     display: flex;
     flex-direction: column;
     gap: 7px;
 }
-
 .quiz-option {
     display: flex;
     align-items: center;
@@ -1361,7 +1595,6 @@ const scrollToBottom = () => {
     font-weight: 500;
     transition: all 0.15s ease;
 }
-
 .quiz-option-letter {
     width: 22px;
     height: 22px;
@@ -1376,7 +1609,6 @@ const scrollToBottom = () => {
     flex-shrink: 0;
     color: var(--c-text2);
 }
-
 .quiz-option--default:hover {
     border-color: var(--c-accent);
     background: var(--c-accent-l);
@@ -1406,7 +1638,6 @@ const scrollToBottom = () => {
     opacity: 0.4;
     cursor: not-allowed;
 }
-
 .quiz-feedback {
     margin-top: 10px;
     padding: 9px 14px;
@@ -1415,7 +1646,6 @@ const scrollToBottom = () => {
     font-weight: 500;
     animation: msgIn 0.2s ease-out;
 }
-
 .quiz-feedback--correct {
     background: #f0fdf4;
     color: #15803d;
@@ -1433,7 +1663,7 @@ const scrollToBottom = () => {
     color: #f87171;
 }
 
-/* ─── FOOTER ─── */
+/* Footer */
 .app-footer {
     padding: 14px 24px 16px;
     background: var(--c-surface);
@@ -1443,7 +1673,6 @@ const scrollToBottom = () => {
         background 0.3s,
         border-color 0.3s;
 }
-
 .image-preview-wrap {
     position: relative;
     display: inline-block;
@@ -1473,9 +1702,7 @@ const scrollToBottom = () => {
     display: flex;
     align-items: center;
     justify-content: center;
-    line-height: 1;
 }
-
 .input-area {
     display: flex;
     align-items: flex-end;
@@ -1486,12 +1713,10 @@ const scrollToBottom = () => {
     padding: 6px 8px 6px 6px;
     transition: border-color 0.2s;
 }
-
 .input-area:focus-within {
     border-color: var(--c-accent);
     background: var(--c-surface);
 }
-
 .attach-btn {
     padding: 8px;
     border-radius: 8px;
@@ -1507,7 +1732,6 @@ const scrollToBottom = () => {
     color: var(--c-accent);
     background: var(--c-accent-l);
 }
-
 .chat-textarea {
     flex: 1;
     background: transparent;
@@ -1522,18 +1746,15 @@ const scrollToBottom = () => {
     min-height: 36px;
     line-height: 1.5;
 }
-
 .chat-textarea::placeholder {
     color: var(--c-text3);
 }
-
 .input-right {
     display: flex;
     align-items: center;
     gap: 6px;
     flex-shrink: 0;
 }
-
 .char-hint {
     font-size: 11px;
     color: var(--c-text3);
@@ -1541,7 +1762,6 @@ const scrollToBottom = () => {
     min-width: 24px;
     text-align: right;
 }
-
 .send-btn {
     width: 34px;
     height: 34px;
@@ -1556,22 +1776,18 @@ const scrollToBottom = () => {
     transition: all 0.2s ease;
     flex-shrink: 0;
 }
-
 .send-btn--active {
     background: var(--c-accent);
     color: white;
     cursor: pointer;
     box-shadow: 0 2px 8px color-mix(in srgb, var(--c-accent) 40%, transparent);
 }
-
 .send-btn--active:hover {
     filter: brightness(1.1);
 }
-
 .send-btn:disabled:not(.send-btn--active) {
     opacity: 0.5;
 }
-
 .input-hint {
     font-size: 11px;
     color: var(--c-text3);
@@ -1579,13 +1795,12 @@ const scrollToBottom = () => {
     padding: 0 4px;
 }
 
-/* ─── PROSE STYLES ─── */
+/* Prose */
 .prose-content {
     font-family: var(--font-body);
     font-size: 14px;
     line-height: 1.65;
 }
-
 .prose-content p {
     margin-bottom: 0.75em;
 }
@@ -1686,7 +1901,6 @@ const scrollToBottom = () => {
     padding: 8px 12px;
     border: 1px solid var(--c-border);
 }
-
 .prose-user * {
     color: inherit;
 }
@@ -1695,7 +1909,6 @@ const scrollToBottom = () => {
     border-color: rgba(255, 255, 255, 0.2);
     color: inherit;
 }
-
 .mermaid-block {
     display: flex;
     justify-content: center;

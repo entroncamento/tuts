@@ -1,16 +1,24 @@
 <?php
 
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\Api\CourseController;
 use App\Http\Controllers\Api\ChatController;
 
-// Pública: usada no ecrã de registo para listar os cursos disponíveis
-Route::get('/courses', [CourseController::class, 'index']);
+/*
+|--------------------------------------------------------------------------
+| API Routes
+|--------------------------------------------------------------------------
+*/
 
-// Protegidas: requerem token Sanctum válido
 Route::middleware('auth:sanctum')->group(function () {
-    Route::post('/chat/criar',                  [ChatController::class, 'criarChat']);
-    Route::post('/chat/perguntar',              [ChatController::class, 'enviarPergunta']);
-    Route::get('/chat/{chat_id}/historico',     [ChatController::class, 'obterHistorico']);
-    Route::get('/meus-chats',                   [ChatController::class, 'listarChatsPorUC']);
+    Route::get('/user', function (Request $request) {
+        return $request->user();
+    });
+    // Aqui ficarão as rotas que OBRIGAM a login no futuro
 });
+
+// 🚀 ROTAS PÚBLICAS (Para testares à vontade sem Login!)
+Route::post('/chat/stream', [ChatController::class, 'enviarPerguntaStream']);
+Route::post('/chat', [ChatController::class, 'criarChat']);
+Route::get('/chat/ucs', [ChatController::class, 'listarChatsPorUC']);
+Route::get('/chat/{id}', [ChatController::class, 'obterHistorico']);
