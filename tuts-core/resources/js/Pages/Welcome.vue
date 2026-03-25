@@ -3,188 +3,69 @@
         class="app-root flex h-screen font-sans transition-colors duration-300"
         :class="{ dark: isDark }"
     >
-        <!-- ═══════════════════════ SIDEBAR ═══════════════════════ -->
-        <aside class="sidebar flex flex-col flex-shrink-0 z-10">
-            <div class="sidebar-logo">
-                <div class="logo-icon">
-                    <svg
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        xmlns="http://www.w3.org/2000/svg"
-                        class="w-5 h-5"
-                    >
-                        <path
-                            d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"
-                            stroke="currentColor"
-                            stroke-width="2"
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                        />
-                    </svg>
-                </div>
-                <div>
-                    <h1 class="logo-title">Tut's</h1>
-                    <p class="logo-subtitle">Tutor Virtual</p>
-                </div>
-            </div>
+        <Login v-if="!utilizador" @autenticado="aoAutenticar" />
 
-            <div class="sidebar-section-label">As Tuas Cadeiras</div>
-            <nav class="sidebar-nav custom-scrollbar">
-                <button
-                    v-for="uc in listaUCs"
-                    :key="uc"
-                    @click="selecionarUC(uc)"
-                    :class="['uc-btn', ucAtual === uc ? 'uc-btn--active' : '']"
-                    :title="uc"
-                >
-                    <span class="uc-icon">{{
-                        ucAtual === uc ? "📂" : "📁"
-                    }}</span>
-                    <span class="uc-name">{{ uc }}</span>
-                    <span v-if="ucAtual === uc" class="uc-active-dot"></span>
-                </button>
-            </nav>
-
-            <div class="sidebar-footer">
-                <div class="api-status">
-                    <span class="status-dot">
-                        <span class="status-ping"></span>
-                        <span class="status-core"></span>
-                    </span>
-                    <span>API Online · Porta 8001</span>
-                </div>
-            </div>
-        </aside>
-
-        <!-- ═══════════════════════ MAIN ═══════════════════════ -->
-        <div class="main-area flex flex-col flex-1 h-screen overflow-hidden">
-            <header class="app-header">
-                <div class="header-left">
-                    <div class="breadcrumb-chip">A estudar</div>
-                    <h2 class="header-uc-name">{{ ucAtual }}</h2>
-                </div>
-
-                <div class="header-right">
-                    <div class="mode-selector">
-                        <button
-                            v-for="m in modos"
-                            :key="m.value"
-                            @click="preferencia = m.value"
-                            :class="[
-                                'mode-btn',
-                                preferencia === m.value
-                                    ? 'mode-btn--active'
-                                    : '',
-                            ]"
-                            :title="m.label"
+        <template v-else>
+            <aside class="sidebar flex flex-col flex-shrink-0 z-10">
+                <div class="sidebar-logo">
+                    <div class="logo-icon">
+                        <svg
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            xmlns="http://www.w3.org/2000/svg"
+                            class="w-5 h-5"
                         >
-                            <span class="mode-icon">{{ m.icon }}</span>
-                            <span class="mode-label">{{ m.label }}</span>
-                        </button>
+                            <path
+                                d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"
+                                stroke="currentColor"
+                                stroke-width="2"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                            />
+                        </svg>
                     </div>
+                    <div>
+                        <h1 class="logo-title">Tut's</h1>
+                        <p class="logo-subtitle">Tutor Virtual</p>
+                    </div>
+                </div>
 
+                <div class="sidebar-section-label">As Tuas Cadeiras</div>
+                <nav class="sidebar-nav custom-scrollbar">
                     <button
-                        @click="toggleDarkMode"
-                        class="icon-btn"
-                        title="Alternar Tema"
+                        v-for="uc in listaUCs"
+                        :key="uc"
+                        @click="selecionarUC(uc)"
+                        :class="[
+                            'uc-btn',
+                            ucAtual === uc ? 'uc-btn--active' : '',
+                        ]"
+                        :title="uc"
                     >
-                        <svg
-                            v-if="isDark"
-                            class="w-4 h-4"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                        >
-                            <path
-                                stroke-linecap="round"
-                                stroke-linejoin="round"
-                                stroke-width="2"
-                                d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"
-                            />
-                        </svg>
-                        <svg
-                            v-else
-                            class="w-4 h-4"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                        >
-                            <path
-                                stroke-linecap="round"
-                                stroke-linejoin="round"
-                                stroke-width="2"
-                                d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"
-                            />
-                        </svg>
+                        <span class="uc-icon">{{
+                            ucAtual === uc ? "📂" : "📁"
+                        }}</span>
+                        <span class="uc-name">{{ uc }}</span>
+                        <span
+                            v-if="ucAtual === uc"
+                            class="uc-active-dot"
+                        ></span>
                     </button>
+                </nav>
 
-                    <button
-                        @click="limparChat"
-                        class="icon-btn"
-                        title="Limpar Conversa"
-                    >
-                        <svg
-                            class="w-4 h-4"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                        >
-                            <path
-                                stroke-linecap="round"
-                                stroke-linejoin="round"
-                                stroke-width="2"
-                                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                            />
-                        </svg>
-                    </button>
-                </div>
-            </header>
-
-            <main
-                class="chat-area custom-scrollbar"
-                ref="chatContainer"
-                @scroll="onScroll"
-            >
-                <!-- Welcome State -->
-                <div v-if="mensagens.length === 0" class="welcome-state">
-                    <div class="welcome-orb"></div>
-                    <h3 class="welcome-title">Olá! Sou o Tut's 👋</h3>
-                    <p class="welcome-subtitle">
-                        Estás a estudar <strong>{{ ucAtual }}</strong
-                        >. Escolhe um modo acima e começa a aprender.
-                    </p>
-                    <div class="suggestions">
-                        <button
-                            v-for="s in sugestoes"
-                            :key="s"
-                            @click="usarSugestao(s)"
-                            class="suggestion-chip"
-                        >
-                            {{ s }}
-                        </button>
+                <div class="sidebar-footer">
+                    <div class="api-status">
+                        <span class="status-dot">
+                            <span class="status-ping"></span>
+                            <span class="status-core"></span>
+                        </span>
+                        <span>API Online · Porta 8001</span>
                     </div>
-                </div>
-
-                <!-- Messages -->
-                <div
-                    v-for="(msg, index) in mensagens"
-                    :key="index"
-                    :class="[
-                        'msg-row',
-                        msg.role === 'user' ? 'msg-row--user' : 'msg-row--ai',
-                    ]"
-                >
-                    <div
-                        v-if="msg.role === 'ai'"
-                        class="msg-avatar msg-avatar--ai"
-                    >
-                        T
-                    </div>
-
-                    <div class="msg-content-wrap">
-                        <div v-if="msg.semContexto" class="no-context-alert">
+                    <div class="user-row">
+                        <span class="user-name">{{ utilizador.name }}</span>
+                        <button class="logout-btn" @click="sair" title="Sair">
                             <svg
-                                class="w-4 h-4 flex-shrink-0"
+                                class="w-3.5 h-3.5"
                                 fill="none"
                                 stroke="currentColor"
                                 viewBox="0 0 24 24"
@@ -193,288 +74,78 @@
                                     stroke-linecap="round"
                                     stroke-linejoin="round"
                                     stroke-width="2"
-                                    d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                                    d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
                                 />
                             </svg>
-                            <span
-                                ><strong>Atenção:</strong> Não encontrei
-                                informação sobre isto nos PDFs da UC. A resposta
-                                usa conhecimento geral.</span
-                            >
-                        </div>
+                        </button>
+                    </div>
+                </div>
+            </aside>
 
-                        <div
-                            :class="[
-                                'msg-bubble',
-                                msg.role === 'user'
-                                    ? 'msg-bubble--user'
-                                    : 'msg-bubble--ai',
-                            ]"
-                        >
-                            <div v-if="msg.imagem" class="msg-image-wrap">
-                                <img
-                                    :src="msg.imagem"
-                                    class="msg-image"
-                                    alt="Anexo"
-                                />
-                            </div>
-                            <div
-                                class="prose-content"
+            <div
+                class="main-area flex flex-col flex-1 h-screen overflow-hidden"
+            >
+                <header class="app-header">
+                    <div class="header-left">
+                        <div class="breadcrumb-chip">A estudar</div>
+                        <h2 class="header-uc-name">{{ ucAtual }}</h2>
+                    </div>
+                    <div class="header-right">
+                        <div class="mode-selector">
+                            <button
+                                v-for="m in modos"
+                                :key="m.value"
+                                @click="preferencia = m.value"
                                 :class="[
-                                    msg.role === 'user'
-                                        ? 'prose-user'
-                                        : 'prose-ai',
-                                    aCarregar && index === indiceAtivo
-                                        ? 'streaming-cursor'
+                                    'mode-btn',
+                                    preferencia === m.value
+                                        ? 'mode-btn--active'
                                         : '',
                                 ]"
-                                v-html="renderMarkdown(msg.content)"
-                            ></div>
-                        </div>
-
-                        <div
-                            v-if="msg.sugestoes && msg.sugestoes.length > 0"
-                            class="ai-suggestions-wrap"
-                        >
-                            <button
-                                v-for="(sugestao, sIdx) in msg.sugestoes"
-                                :key="sIdx"
-                                @click="usarSugestao(sugestao)"
-                                class="ai-suggestion-chip"
+                                :title="m.label"
                             >
-                                ✨ {{ sugestao }}
+                                <span class="mode-icon">{{ m.icon }}</span>
+                                <span class="mode-label">{{ m.label }}</span>
                             </button>
                         </div>
-
-                        <div class="msg-meta">
-                            <span class="msg-time">{{
-                                formatarHora(msg.hora)
-                            }}</span>
-                            <button
-                                v-if="msg.role === 'ai' && msg.content"
-                                @click="copiarMensagem(msg.content, index)"
-                                class="copy-btn"
-                                :title="
-                                    copiado === index ? 'Copiado!' : 'Copiar'
-                                "
-                            >
-                                <svg
-                                    v-if="copiado !== index"
-                                    class="w-3.5 h-3.5"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    viewBox="0 0 24 24"
-                                >
-                                    <path
-                                        stroke-linecap="round"
-                                        stroke-linejoin="round"
-                                        stroke-width="2"
-                                        d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
-                                    />
-                                </svg>
-                                <svg
-                                    v-else
-                                    class="w-3.5 h-3.5"
-                                    style="color: #22c55e"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    viewBox="0 0 24 24"
-                                >
-                                    <path
-                                        stroke-linecap="round"
-                                        stroke-linejoin="round"
-                                        stroke-width="2"
-                                        d="M5 13l4 4L19 7"
-                                    />
-                                </svg>
-                                <span>{{
-                                    copiado === index ? "Copiado!" : "Copiar"
-                                }}</span>
-                            </button>
-                        </div>
-                    </div>
-
-                    <div
-                        v-if="msg.role === 'user'"
-                        class="msg-avatar msg-avatar--user"
-                    >
-                        U
-                    </div>
-
-                    <!-- Quiz -->
-                    <div
-                        v-if="msg.quiz && msg.quiz.length > 0"
-                        class="quiz-container"
-                    >
-                        <div class="quiz-header">
-                            <span class="quiz-badge">🎮 Quiz Interativo</span>
-                            <span class="quiz-score" v-if="quizFinalizado(msg)">
-                                {{ pontuacaoQuiz(msg) }}/{{ msg.quiz.length }}
-                                corretas
-                            </span>
-                        </div>
-                        <div
-                            v-for="(pergunta, qIndex) in msg.quiz"
-                            :key="qIndex"
-                            class="quiz-card"
-                        >
-                            <p class="quiz-question">
-                                <span class="quiz-q-num">{{ qIndex + 1 }}</span>
-                                {{ pergunta.pergunta }}
-                            </p>
-                            <div class="quiz-options">
-                                <button
-                                    v-for="(opcao, oIndex) in pergunta.opcoes"
-                                    :key="oIndex"
-                                    @click="responderQuiz(msg, qIndex, oIndex)"
-                                    :disabled="
-                                        msg.respostas[qIndex] !== undefined
-                                    "
-                                    :class="[
-                                        'quiz-option',
-                                        getQuizButtonClass(msg, qIndex, oIndex),
-                                    ]"
-                                >
-                                    <span class="quiz-option-letter">{{
-                                        String.fromCharCode(65 + oIndex)
-                                    }}</span>
-                                    <span>{{ opcao }}</span>
-                                </button>
-                            </div>
-                            <div
-                                v-if="msg.respostas[qIndex] !== undefined"
-                                :class="[
-                                    'quiz-feedback',
-                                    msg.respostas[qIndex] === pergunta.correta
-                                        ? 'quiz-feedback--correct'
-                                        : 'quiz-feedback--wrong',
-                                ]"
-                            >
-                                <span
-                                    v-if="
-                                        msg.respostas[qIndex] ===
-                                        pergunta.correta
-                                    "
-                                    >🎉 Resposta certa!</span
-                                >
-                                <span v-else
-                                    >❌ Errado! A resposta certa era a
-                                    <strong>{{
-                                        String.fromCharCode(
-                                            65 + pergunta.correta,
-                                        )
-                                    }}</strong
-                                    >.</span
-                                >
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- ✅ Typing Indicator com mensagens de estado -->
-                <div
-                    v-if="aCarregar && indiceAtivo === -1"
-                    class="msg-row msg-row--ai"
-                >
-                    <div class="msg-avatar msg-avatar--ai">T</div>
-                    <div class="typing-bubble">
-                        <template v-if="statusMsg">
-                            <!-- Ícone de spinner + texto do status -->
-                            <span class="status-spinner"></span>
-                            <span class="status-msg-text">{{ statusMsg }}</span>
-                        </template>
-                        <template v-else>
-                            <span class="typing-dot"></span>
-                            <span class="typing-dot"></span>
-                            <span class="typing-dot"></span>
-                        </template>
-                    </div>
-                </div>
-            </main>
-
-            <!-- FAB scroll to bottom -->
-            <Transition name="fab">
-                <button
-                    v-if="mostrarScrollBtn"
-                    @click="scrollToBottom"
-                    class="scroll-fab"
-                    title="Ir para o fundo"
-                >
-                    <svg
-                        class="w-4 h-4"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                    >
-                        <path
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                            stroke-width="2.5"
-                            d="M19 9l-7 7-7-7"
-                        />
-                    </svg>
-                </button>
-            </Transition>
-
-            <!-- Footer -->
-            <footer class="app-footer">
-                <div v-if="imagemPreview" class="image-preview-wrap">
-                    <img :src="imagemPreview" class="image-preview-thumb" />
-                    <button @click="removerImagem" class="image-preview-remove">
-                        ×
-                    </button>
-                </div>
-
-                <div class="input-area">
-                    <label class="attach-btn" title="Anexar Imagem">
-                        <svg
-                            class="w-5 h-5"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                        >
-                            <path
-                                stroke-linecap="round"
-                                stroke-linejoin="round"
-                                stroke-width="2"
-                                d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"
-                            />
-                        </svg>
-                        <input
-                            type="file"
-                            class="hidden"
-                            accept="image/*"
-                            @change="lidarComImagem"
-                        />
-                    </label>
-
-                    <textarea
-                        v-model="mensagemAtual"
-                        @keydown.enter.exact.prevent="enviarMensagem"
-                        @input="autoResize"
-                        ref="textareaRef"
-                        rows="1"
-                        placeholder="Faz uma pergunta... (Enter envia, Shift+Enter nova linha)"
-                        class="chat-textarea"
-                    ></textarea>
-
-                    <div class="input-right">
-                        <span
-                            class="char-hint"
-                            v-if="mensagemAtual.length > 0"
-                            >{{ mensagemAtual.length }}</span
-                        >
                         <button
-                            @click="enviarMensagem"
-                            :disabled="
-                                aCarregar ||
-                                (!mensagemAtual.trim() && !imagemFicheiro)
-                            "
-                            class="send-btn"
-                            :class="{
-                                'send-btn--active':
-                                    mensagemAtual.trim() || imagemFicheiro,
-                            }"
+                            @click="toggleDarkMode"
+                            class="icon-btn"
+                            title="Alternar Tema"
+                        >
+                            <svg
+                                v-if="isDark"
+                                class="w-4 h-4"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                            >
+                                <path
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                    stroke-width="2"
+                                    d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"
+                                />
+                            </svg>
+                            <svg
+                                v-else
+                                class="w-4 h-4"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                            >
+                                <path
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                    stroke-width="2"
+                                    d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"
+                                />
+                            </svg>
+                        </button>
+                        <button
+                            @click="limparChat"
+                            class="icon-btn"
+                            title="Limpar Conversa"
                         >
                             <svg
                                 class="w-4 h-4"
@@ -486,18 +157,449 @@
                                     stroke-linecap="round"
                                     stroke-linejoin="round"
                                     stroke-width="2"
-                                    d="M5 12h14M12 5l7 7-7 7"
+                                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
                                 />
                             </svg>
                         </button>
                     </div>
+                </header>
+
+                <main
+                    class="chat-area custom-scrollbar"
+                    ref="chatContainer"
+                    @scroll="onScroll"
+                >
+                    <div v-if="mensagens.length === 0" class="welcome-state">
+                        <div class="welcome-orb"></div>
+                        <h3 class="welcome-title">
+                            Olá, {{ utilizador.name.split(" ")[0] }}! 👋
+                        </h3>
+                        <p class="welcome-subtitle">
+                            Estás a estudar <strong>{{ ucAtual }}</strong
+                            >. Escolhe um modo acima e começa a aprender.
+                        </p>
+                        <div class="suggestions">
+                            <button
+                                v-for="s in sugestoes"
+                                :key="s"
+                                @click="usarSugestao(s)"
+                                class="suggestion-chip"
+                            >
+                                {{ s }}
+                            </button>
+                        </div>
+                    </div>
+
+                    <div
+                        v-for="(msg, index) in mensagens"
+                        :key="index"
+                        v-show="msg.role === 'user' || msg.content.length > 0"
+                        :class="[
+                            'msg-row',
+                            msg.role === 'user'
+                                ? 'msg-row--user'
+                                : 'msg-row--ai',
+                        ]"
+                    >
+                        <div
+                            v-if="msg.role === 'ai'"
+                            class="msg-avatar msg-avatar--ai"
+                        >
+                            T
+                        </div>
+
+                        <div class="msg-content-wrap">
+                            <div
+                                v-if="msg.semContexto"
+                                class="no-context-alert"
+                            >
+                                <svg
+                                    class="w-4 h-4 flex-shrink-0"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                >
+                                    <path
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                        stroke-width="2"
+                                        d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                                    />
+                                </svg>
+                                <span
+                                    ><strong>Atenção:</strong> Não encontrei
+                                    informação sobre isto nos PDFs da UC. A
+                                    resposta usa conhecimento geral.</span
+                                >
+                            </div>
+
+                            <div
+                                :class="[
+                                    'msg-bubble',
+                                    msg.role === 'user'
+                                        ? 'msg-bubble--user'
+                                        : 'msg-bubble--ai',
+                                ]"
+                            >
+                                <div v-if="msg.imagem" class="msg-image-wrap">
+                                    <img
+                                        :src="msg.imagem"
+                                        class="msg-image"
+                                        alt="Anexo"
+                                    />
+                                </div>
+                                <div
+                                    class="prose-content"
+                                    @click="lidarComCliqueCitacao"
+                                    :class="[
+                                        msg.role === 'user'
+                                            ? 'prose-user'
+                                            : 'prose-ai',
+                                        aCarregar && index === indiceAtivo
+                                            ? 'streaming-cursor'
+                                            : '',
+                                    ]"
+                                    v-html="renderMarkdown(msg.content)"
+                                ></div>
+                            </div>
+
+                            <div
+                                v-if="msg.sugestoes && msg.sugestoes.length > 0"
+                                class="ai-suggestions-wrap"
+                            >
+                                <button
+                                    v-for="(s, si) in msg.sugestoes"
+                                    :key="si"
+                                    @click="usarSugestao(s)"
+                                    class="ai-suggestion-chip"
+                                >
+                                    ✨ {{ s }}
+                                </button>
+                            </div>
+
+                            <div class="msg-meta">
+                                <span class="msg-time">{{
+                                    formatarHora(msg.hora)
+                                }}</span>
+                                <button
+                                    v-if="msg.role === 'ai' && msg.content"
+                                    @click="copiarMensagem(msg.content, index)"
+                                    class="copy-btn"
+                                    :title="
+                                        copiado === index
+                                            ? 'Copiado!'
+                                            : 'Copiar'
+                                    "
+                                >
+                                    <svg
+                                        v-if="copiado !== index"
+                                        class="w-3.5 h-3.5"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        viewBox="0 0 24 24"
+                                    >
+                                        <path
+                                            stroke-linecap="round"
+                                            stroke-linejoin="round"
+                                            stroke-width="2"
+                                            d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                                        />
+                                    </svg>
+                                    <svg
+                                        v-else
+                                        class="w-3.5 h-3.5"
+                                        style="color: #22c55e"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        viewBox="0 0 24 24"
+                                    >
+                                        <path
+                                            stroke-linecap="round"
+                                            stroke-linejoin="round"
+                                            stroke-width="2"
+                                            d="M5 13l4 4L19 7"
+                                        />
+                                    </svg>
+                                    <span>{{
+                                        copiado === index
+                                            ? "Copiado!"
+                                            : "Copiar"
+                                    }}</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div
+                            v-if="msg.role === 'user'"
+                            class="msg-avatar msg-avatar--user"
+                        >
+                            {{ utilizador.name[0].toUpperCase() }}
+                        </div>
+
+                        <div
+                            v-if="msg.quiz && msg.quiz.length > 0"
+                            class="quiz-container"
+                        >
+                            <div class="quiz-header">
+                                <span class="quiz-badge"
+                                    >🎮 Quiz Interativo</span
+                                >
+                                <span
+                                    class="quiz-score"
+                                    v-if="quizFinalizado(msg)"
+                                    >{{ pontuacaoQuiz(msg) }}/{{
+                                        msg.quiz.length
+                                    }}
+                                    corretas</span
+                                >
+                            </div>
+                            <div
+                                v-for="(pergunta, qi) in msg.quiz"
+                                :key="qi"
+                                class="quiz-card"
+                            >
+                                <p class="quiz-question">
+                                    <span class="quiz-q-num">{{ qi + 1 }}</span>
+                                    {{ pergunta.pergunta }}
+                                </p>
+                                <div class="quiz-options">
+                                    <button
+                                        v-for="(opcao, oi) in pergunta.opcoes"
+                                        :key="oi"
+                                        @click="responderQuiz(msg, qi, oi)"
+                                        :disabled="
+                                            msg.respostas[qi] !== undefined
+                                        "
+                                        :class="[
+                                            'quiz-option',
+                                            getQuizButtonClass(msg, qi, oi),
+                                        ]"
+                                    >
+                                        <span class="quiz-option-letter">{{
+                                            String.fromCharCode(65 + oi)
+                                        }}</span>
+                                        <span>{{ opcao }}</span>
+                                    </button>
+                                </div>
+                                <div
+                                    v-if="msg.respostas[qi] !== undefined"
+                                    :class="[
+                                        'quiz-feedback',
+                                        msg.respostas[qi] === pergunta.correta
+                                            ? 'quiz-feedback--correct'
+                                            : 'quiz-feedback--wrong',
+                                    ]"
+                                >
+                                    <div class="mb-2">
+                                        <span
+                                            v-if="
+                                                msg.respostas[qi] ===
+                                                pergunta.correta
+                                            "
+                                            >🎉 Resposta certa!</span
+                                        >
+                                        <span v-else
+                                            >❌ Errado! A resposta certa era a
+                                            <strong>{{
+                                                String.fromCharCode(
+                                                    65 + pergunta.correta,
+                                                )
+                                            }}</strong
+                                            >.</span
+                                        >
+                                    </div>
+                                    <div
+                                        v-if="pergunta.explicacao"
+                                        class="quiz-explanation mb-2"
+                                    >
+                                        💡 <strong>Explicação:</strong>
+                                        {{ pergunta.explicacao }}
+                                    </div>
+
+                                    <button
+                                        @click="
+                                            usarSugestao(
+                                                `Podes aprofundar e explicar-me melhor a pergunta: '${pergunta.pergunta}'?`,
+                                            )
+                                        "
+                                        class="quiz-explain-btn"
+                                    >
+                                        🧠 Aprofundar Explicação
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div
+                        v-if="aCarregar && indiceAtivo === -1"
+                        class="msg-row msg-row--ai"
+                    >
+                        <div class="msg-avatar msg-avatar--ai">T</div>
+                        <div class="typing-bubble">
+                            <template v-if="statusMsg">
+                                <span class="status-spinner"></span>
+                                <span class="status-msg-text">{{
+                                    statusMsg
+                                }}</span>
+                            </template>
+                            <template v-else>
+                                <span class="typing-dot"></span>
+                                <span class="typing-dot"></span>
+                                <span class="typing-dot"></span>
+                            </template>
+                        </div>
+                    </div>
+                </main>
+
+                <Transition name="fab">
+                    <button
+                        v-if="mostrarScrollBtn"
+                        @click="scrollToBottom"
+                        class="scroll-fab"
+                        title="Ir para o fundo"
+                    >
+                        <svg
+                            class="w-4 h-4"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                        >
+                            <path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                stroke-width="2.5"
+                                d="M19 9l-7 7-7-7"
+                            />
+                        </svg>
+                    </button>
+                </Transition>
+
+                <footer class="app-footer">
+                    <div v-if="imagemPreview" class="image-preview-wrap">
+                        <img :src="imagemPreview" class="image-preview-thumb" />
+                        <button
+                            @click="removerImagem"
+                            class="image-preview-remove"
+                        >
+                            ×
+                        </button>
+                    </div>
+                    <div class="input-area">
+                        <label class="attach-btn" title="Anexar Imagem">
+                            <svg
+                                class="w-5 h-5"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                            >
+                                <path
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                    stroke-width="2"
+                                    d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"
+                                />
+                            </svg>
+                            <input
+                                type="file"
+                                class="hidden"
+                                accept="image/*"
+                                @change="lidarComImagem"
+                            />
+                        </label>
+                        <textarea
+                            v-model="mensagemAtual"
+                            @keydown.enter.exact.prevent="enviarMensagem"
+                            @input="autoResize"
+                            ref="textareaRef"
+                            rows="1"
+                            placeholder="Faz uma pergunta... (Enter envia, Shift+Enter nova linha)"
+                            class="chat-textarea"
+                        ></textarea>
+                        <div class="input-right">
+                            <span
+                                class="char-hint"
+                                v-if="mensagemAtual.length > 0"
+                                >{{ mensagemAtual.length }}</span
+                            >
+                            <button
+                                @click="enviarMensagem"
+                                :disabled="
+                                    aCarregar ||
+                                    (!mensagemAtual.trim() && !imagemFicheiro)
+                                "
+                                class="send-btn"
+                                :class="{
+                                    'send-btn--active':
+                                        mensagemAtual.trim() || imagemFicheiro,
+                                }"
+                            >
+                                <svg
+                                    class="w-4 h-4"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                >
+                                    <path
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                        stroke-width="2"
+                                        d="M5 12h14M12 5l7 7-7 7"
+                                    />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                    <p class="input-hint">
+                        Modo: <strong>{{ modoAtual?.label }}</strong> · Enter
+                        envia · Shift+Enter nova linha
+                    </p>
+                </footer>
+            </div>
+
+            <!-- 🚀 JANELA MODAL DO LEITOR DE PDF -->
+            <Transition name="fade">
+                <div
+                    v-if="pdfModalAberto"
+                    class="pdf-modal-overlay"
+                    @click.self="fecharPdf"
+                >
+                    <div class="pdf-modal-container">
+                        <div class="pdf-modal-header">
+                            <div class="pdf-modal-title">
+                                📑 Consulta de Fonte Original
+                                <span class="pdf-modal-filename">{{
+                                    pdfFicheiroAtual
+                                }}</span>
+                            </div>
+                            <button
+                                @click="fecharPdf"
+                                class="pdf-modal-close"
+                                title="Fechar Visualizador"
+                            >
+                                <svg
+                                    class="w-5 h-5"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                >
+                                    <path
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                        stroke-width="2"
+                                        d="M6 18L18 6M6 6l12 12"
+                                    ></path>
+                                </svg>
+                            </button>
+                        </div>
+                        <iframe
+                            :src="pdfUrlAtual"
+                            class="pdf-modal-iframe"
+                        ></iframe>
+                    </div>
                 </div>
-                <p class="input-hint">
-                    Modo: <strong>{{ modoAtual?.label }}</strong> · Enter envia
-                    · Shift+Enter nova linha
-                </p>
-            </footer>
-        </div>
+            </Transition>
+        </template>
     </div>
 </template>
 
@@ -507,11 +609,12 @@ import { marked } from "marked";
 import DOMPurify from "dompurify";
 import mermaid from "mermaid";
 import cadeirasDados from "../cadeiras_mtc.json";
+import Login from "./Login.vue";
 
 mermaid.initialize({ startOnLoad: false, theme: "base" });
 
 const modos = [
-    { value: "textual", icon: "📖", label: "Tutor" },
+    { value: "default", icon: "📖", label: "Tutor" },
     { value: "visual", icon: "🎨", label: "Visual" },
     { value: "plano", icon: "📅", label: "Plano" },
     { value: "quiz", icon: "🎮", label: "Quiz" },
@@ -524,7 +627,7 @@ const mensagemAtual = ref("");
 const aCarregar = ref(false);
 const chatContainer = ref(null);
 const textareaRef = ref(null);
-const preferencia = ref("textual");
+const preferencia = ref("default");
 const imagemFicheiro = ref(null);
 const imagemPreview = ref(null);
 const threadId = ref(crypto.randomUUID());
@@ -533,8 +636,35 @@ const isDark = ref(false);
 const copiado = ref(null);
 const mostrarScrollBtn = ref(false);
 const indiceAtivo = ref(-1);
-// ✅ Mensagem de estado do processamento
 const statusMsg = ref("");
+const utilizador = ref(null);
+
+// 🚀 Variáveis do Leitor de PDF
+const pdfModalAberto = ref(false);
+const pdfUrlAtual = ref("");
+const pdfFicheiroAtual = ref("");
+
+const fecharPdf = () => {
+    pdfModalAberto.value = false;
+    pdfUrlAtual.value = "";
+    pdfFicheiroAtual.value = "";
+};
+
+// 🚀 Detetor de Cliques nas Citações Geradas
+const lidarComCliqueCitacao = (event) => {
+    const btn = event.target.closest(".citation-badge");
+    if (btn) {
+        const ficheiro = btn.getAttribute("data-ficheiro").trim();
+        const pagina = btn.getAttribute("data-pagina").trim();
+
+        pdfFicheiroAtual.value = ficheiro;
+
+        // Caminho padrão do Laravel para ficheiros públicos.
+        // O Laravel serve da pasta "public/storage/pdfs" através da rota /storage/pdfs
+        pdfUrlAtual.value = `/pdfs/${encodeURIComponent(ficheiro)}#page=${pagina}`;
+        pdfModalAberto.value = true;
+    }
+};
 
 const modoAtual = computed(() =>
     modos.find((m) => m.value === preferencia.value),
@@ -546,42 +676,29 @@ const sugestoes = computed(() => [
     `Qual é o melhor plano de estudo?`,
 ]);
 
-function scrollToBottom() {
-    if (chatContainer.value)
-        chatContainer.value.scrollTop = chatContainer.value.scrollHeight;
+function getCsrfToken() {
+    const match = document.cookie.match(/XSRF-TOKEN=([^;]+)/);
+    return match ? decodeURIComponent(match[1]) : "";
 }
 
-const onScroll = () => {
-    const el = chatContainer.value;
-    if (!el) return;
-    mostrarScrollBtn.value =
-        el.scrollHeight - el.scrollTop - el.clientHeight > 120;
-};
+function aoAutenticar(user) {
+    utilizador.value = user;
+}
 
-const formatarHora = (d) =>
-    d?.toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" }) ??
-    "";
-
-const selecionarUC = (novaUC) => {
-    if (ucAtual.value === novaUC) return;
-    ucAtual.value = novaUC;
+async function sair() {
+    await window.axios.post("/api/logout");
+    utilizador.value = null;
     mensagens.value = [];
-    statusMsg.value = "";
-    threadId.value = crypto.randomUUID();
-};
+}
 
-const limparChat = () => {
-    mensagens.value = [];
-    statusMsg.value = "";
-    threadId.value = crypto.randomUUID();
-};
+onMounted(async () => {
+    try {
+        const { data } = await window.axios.get("/api/me");
+        utilizador.value = data.user;
+    } catch (_) {
+        /* sessão inexistente */
+    }
 
-const usarSugestao = (texto) => {
-    mensagemAtual.value = texto;
-    enviarMensagem();
-};
-
-onMounted(() => {
     const prefereDark =
         localStorage.theme === "dark" ||
         (!("theme" in localStorage) &&
@@ -590,40 +707,67 @@ onMounted(() => {
     document.documentElement.classList.toggle("dark", prefereDark);
 });
 
+const scrollToBottom = () => {
+    if (chatContainer.value)
+        chatContainer.value.scrollTop = chatContainer.value.scrollHeight;
+};
+const onScroll = () => {
+    const el = chatContainer.value;
+    if (!el) return;
+    mostrarScrollBtn.value =
+        el.scrollHeight - el.scrollTop - el.clientHeight > 120;
+};
+const formatarHora = (d) =>
+    d?.toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" }) ??
+    "";
+const selecionarUC = (novaUC) => {
+    if (ucAtual.value === novaUC) return;
+    ucAtual.value = novaUC;
+    mensagens.value = [];
+    statusMsg.value = "";
+    threadId.value = crypto.randomUUID();
+};
+const limparChat = () => {
+    mensagens.value = [];
+    statusMsg.value = "";
+    threadId.value = crypto.randomUUID();
+};
+
+const usarSugestao = (texto) => {
+    if (aCarregar.value) return;
+    mensagemAtual.value = texto;
+    enviarMensagem();
+};
+
 const toggleDarkMode = () => {
     isDark.value = !isDark.value;
     document.documentElement.classList.toggle("dark", isDark.value);
     localStorage.theme = isDark.value ? "dark" : "light";
     mermaid.initialize({ theme: isDark.value ? "dark" : "base" });
 };
-
-const lidarComImagem = (event) => {
-    const file = event.target.files[0];
-    if (!file) return;
-    imagemFicheiro.value = file;
-    imagemPreview.value = URL.createObjectURL(file);
+const lidarComImagem = (e) => {
+    const f = e.target.files[0];
+    if (!f) return;
+    imagemFicheiro.value = f;
+    imagemPreview.value = URL.createObjectURL(f);
 };
-
 const removerImagem = () => {
     imagemFicheiro.value = null;
     imagemPreview.value = null;
 };
-
 const autoResize = () => {
     const el = textareaRef.value;
     if (!el) return;
     el.style.height = "auto";
     el.style.height = Math.min(el.scrollHeight, 160) + "px";
 };
-
 const copiarMensagem = async (content, index) => {
     await navigator.clipboard.writeText(content);
     copiado.value = index;
     setTimeout(() => (copiado.value = null), 2000);
 };
-
-const responderQuiz = (msg, perguntaIndex, opcaoIndex) => {
-    msg.respostas[perguntaIndex] = opcaoIndex;
+const responderQuiz = (msg, pi, oi) => {
+    msg.respostas[pi] = oi;
 };
 const quizFinalizado = (msg) =>
     msg.quiz &&
@@ -631,13 +775,10 @@ const quizFinalizado = (msg) =>
     msg.respostas.filter((r) => r !== undefined).length === msg.quiz.length;
 const pontuacaoQuiz = (msg) =>
     msg.respostas.filter((r, i) => r === msg.quiz[i].correta).length;
-const getQuizButtonClass = (msg, qIndex, oIndex) => {
-    const respondido = msg.respostas[qIndex] !== undefined;
-    const correta = msg.quiz[qIndex].correta;
-    if (!respondido) return "quiz-option--default";
-    if (oIndex === correta) return "quiz-option--correct";
-    if (msg.respostas[qIndex] === oIndex && oIndex !== correta)
-        return "quiz-option--wrong";
+const getQuizButtonClass = (msg, qi, oi) => {
+    if (msg.respostas[qi] === undefined) return "quiz-option--default";
+    if (oi === msg.quiz[qi].correta) return "quiz-option--correct";
+    if (msg.respostas[qi] === oi) return "quiz-option--wrong";
     return "quiz-option--inactive";
 };
 
@@ -645,17 +786,33 @@ const renderMarkdown = (texto) => {
     const str = texto || "";
     if (!str.trim()) return "";
     try {
-        const comMermaid = str.replace(
+        let processado = str.replace(
             /```mermaid\n([\s\S]*?)```/g,
-            (match, codigo) => {
+            (_, codigo) => {
                 const safe = codigo
-                    .replace(/\[.*?:\d+\]/g, "")
+                    .replace(/\[[^\]]+:\d+\]/g, "")
                     .replace(/\[|\]/g, "");
                 return `<div class="mermaid mermaid-block">${safe}</div>`;
             },
         );
-        return DOMPurify.sanitize(marked.parse(comMermaid), {
-            ADD_ATTR: ["class"],
+
+        // 🚀 REGEX APRIMORADO: Apanha citações com ou sem espaços
+        // Pega em formatos como [Ficheiro.pdf: 1], [Ficheiro.pdf :1], etc.
+        processado = processado.replace(
+            /\[([^\]]+?)\s*:\s*(\d+)\s*\]/g,
+            (match, ficheiro, pagina) => {
+                const f = ficheiro.trim();
+                const p = pagina.trim();
+                return `<button class="citation-badge" data-ficheiro="${f}" data-pagina="${p}" title="Abrir Documento Original na página ${p}">
+                    <svg class="citation-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path></svg>
+                    ${f} (Pág. ${p})
+                </button>`;
+            },
+        );
+
+        return DOMPurify.sanitize(marked.parse(processado), {
+            ADD_ATTR: ["class", "data-ficheiro", "data-pagina", "title"],
+            ADD_TAGS: ["svg", "path", "button"],
         });
     } catch (e) {
         return str;
@@ -698,8 +855,8 @@ const enviarMensagem = async () => {
     const indiceIA = mensagens.value.length - 1;
     indiceAtivo.value = -1;
     statusMsg.value = "";
-
     aCarregar.value = true;
+
     await nextTick();
     scrollToBottom();
 
@@ -713,12 +870,19 @@ const enviarMensagem = async () => {
     try {
         const resposta = await fetch("/api/chat/stream", {
             method: "POST",
-            body: formData,
+            credentials: "include",
             headers: {
-                "X-Requested-With": "XMLHttpRequest",
                 Accept: "text/event-stream",
+                "X-Requested-With": "XMLHttpRequest",
+                "X-XSRF-TOKEN": getCsrfToken(),
             },
+            body: formData,
         });
+
+        if (resposta.status === 401 || resposta.redirected) {
+            utilizador.value = null;
+            return;
+        }
 
         if (!resposta.ok) throw new Error(`HTTP ${resposta.status}`);
 
@@ -729,7 +893,6 @@ const enviarMensagem = async () => {
         while (true) {
             const { done, value } = await reader.read();
             if (done) break;
-
             buffer += decoder.decode(value, { stream: true });
             const partes = buffer.split("\n");
             buffer = partes.pop();
@@ -737,35 +900,25 @@ const enviarMensagem = async () => {
             for (let parte of partes) {
                 parte = parte.trim();
                 if (!parte.startsWith("data: ")) continue;
-
                 const jsonStr = parte.substring(6).trim();
                 if (jsonStr === "[DONE]") continue;
-
                 try {
                     const data = JSON.parse(jsonStr);
-
-                    // ✅ Actualizar flag sem_contexto
                     if (data.sem_contexto !== undefined)
                         mensagens.value[indiceIA].semContexto =
                             data.sem_contexto;
-
-                    // ✅ Mostrar mensagem de estado no typing bubble
                     if (data.status_msg) {
                         statusMsg.value = data.status_msg;
                         scrollToBottom();
                     }
-
-                    // ✅ Primeiro chunk — limpa status, ativa cursor piscante
-                    // ✅ DEPOIS — transita SEMPRE no primeiro chunk
                     if (data.chunk) {
-                        statusMsg.value = ""; // limpa o status
-                        indiceAtivo.value = indiceIA; // activa o cursor piscante
-                        // NÃO pôr aCarregar=false aqui — o cursor precisa que seja true
+                        statusMsg.value = "";
+                        indiceAtivo.value = indiceIA;
                         mensagens.value[indiceIA].content += data.chunk;
                         scrollToBottom();
                     }
                 } catch (e) {
-                    /* JSON incompleto — ignorar */
+                    /* JSON incompleto */
                 }
             }
         }
@@ -776,31 +929,42 @@ const enviarMensagem = async () => {
         let textoIA = mensagens.value[indiceIA].content;
 
         const sugestoesMatch = textoIA.match(
-            /\[SUGESTOES\]([\s\S]*?)\[\/SUGESTOES\]/,
+            /\[SUGEST[OÕ]ES\]([\s\S]*?)\[\/SUGEST[OÕ]ES\]/i,
         );
         if (sugestoesMatch) {
             mensagens.value[indiceIA].sugestoes = sugestoesMatch[1]
                 .split("|")
                 .map((s) => s.trim())
-                .filter((s) => s);
-            textoIA = textoIA
-                .replace(/\[SUGESTOES\][\s\S]*?\[\/SUGESTOES\]/, "")
-                .trim();
+                .filter(Boolean);
         }
+        textoIA = textoIA
+            .replace(/\[SUGEST[OÕ]ES\][\s\S]*?\[\/SUGEST[OÕ]ES\]/gi, "")
+            .trim();
 
-        const quizMatch = textoIA.match(/\[QUIZ\]([\s\S]*?)\[\/QUIZ\]/);
+        const quizMatch = textoIA.match(/\[QUIZ\]([\s\S]*?)\[\/QUIZ\]/i);
         if (quizMatch) {
             try {
-                const qData = JSON.parse(quizMatch[1].trim());
+                let jsonCru = quizMatch[1].trim();
+                jsonCru = jsonCru
+                    .replace(/^```(json)?\s*/i, "")
+                    .replace(/\s*```$/i, "")
+                    .trim();
+
+                const qData = JSON.parse(jsonCru);
                 mensagens.value[indiceIA].quiz = qData;
                 mensagens.value[indiceIA].respostas = new Array(qData.length);
-                textoIA = textoIA
-                    .replace(/\[QUIZ\][\s\S]*?\[\/QUIZ\]/, "")
-                    .trim();
             } catch (e) {
-                /* JSON inválido */
+                console.warn(
+                    "A IA gerou um Quiz com formato inválido e foi ignorado.",
+                    e,
+                );
             }
         }
+        textoIA = textoIA.replace(/\[QUIZ\][\s\S]*?\[\/QUIZ\]/gi, "").trim();
+
+        textoIA = textoIA
+            .replace(/\[CALENDARIO\][\s\S]*?\[\/CALENDARIO\]/g, "")
+            .trim();
 
         mensagens.value[indiceIA].content = textoIA;
         await desenharGraficos();
@@ -820,7 +984,6 @@ const enviarMensagem = async () => {
 
 <style>
 @import url("https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=Instrument+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap");
-
 :root {
     --c-bg: #f7f6f3;
     --c-surface: #ffffff;
@@ -857,7 +1020,6 @@ const enviarMensagem = async () => {
     --c-user-bg: #7b6ff0;
     --c-user-txt: #ffffff;
 }
-
 * {
     box-sizing: border-box;
     margin: 0;
@@ -880,8 +1042,6 @@ const enviarMensagem = async () => {
     background: var(--c-border2);
     border-radius: 20px;
 }
-
-/* Sidebar */
 .sidebar {
     width: var(--sidebar-w);
     background: var(--c-surface);
@@ -986,6 +1146,9 @@ const enviarMensagem = async () => {
 .sidebar-footer {
     padding: 14px 20px;
     border-top: 1px solid var(--c-border);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
 }
 .api-status {
     display: flex;
@@ -1027,8 +1190,40 @@ const enviarMensagem = async () => {
         opacity: 0;
     }
 }
-
-/* Header */
+.user-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+.user-name {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--c-text2);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+}
+.logout-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 7px;
+    border: 1px solid var(--c-border);
+    background: transparent;
+    color: var(--c-text3);
+    cursor: pointer;
+    transition: all 0.15s;
+    flex-shrink: 0;
+}
+.logout-btn:hover {
+    border-color: #ef4444;
+    color: #ef4444;
+    background: rgba(239, 68, 68, 0.08);
+}
 .main-area {
     background: var(--c-bg);
     transition: background 0.3s;
@@ -1139,8 +1334,6 @@ const enviarMensagem = async () => {
     color: var(--c-text);
     background: var(--c-surface2);
 }
-
-/* Chat */
 .chat-area {
     flex: 1;
     overflow-y: auto;
@@ -1150,8 +1343,6 @@ const enviarMensagem = async () => {
     gap: 20px;
     position: relative;
 }
-
-/* Welcome */
 .welcome-state {
     display: flex;
     flex-direction: column;
@@ -1221,8 +1412,6 @@ const enviarMensagem = async () => {
     color: var(--c-accent);
     background: var(--c-accent-l);
 }
-
-/* Mensagens */
 .msg-row {
     display: flex;
     align-items: flex-end;
@@ -1255,6 +1444,7 @@ const enviarMensagem = async () => {
     justify-content: center;
     font-size: 11px;
     font-weight: 700;
+    line-height: 1;
     flex-shrink: 0;
 }
 .msg-avatar--ai {
@@ -1306,7 +1496,6 @@ const enviarMensagem = async () => {
     border-radius: 10px;
     border: 1px solid var(--c-border);
 }
-
 .msg-meta {
     display: flex;
     align-items: center;
@@ -1340,7 +1529,6 @@ const enviarMensagem = async () => {
     color: var(--c-text);
     border-color: var(--c-border2);
 }
-
 @keyframes blink {
     0%,
     100% {
@@ -1358,8 +1546,6 @@ const enviarMensagem = async () => {
     margin-left: 2px;
     font-size: 0.9em;
 }
-
-/* Alerta sem contexto */
 .no-context-alert {
     display: flex;
     align-items: flex-start;
@@ -1378,8 +1564,6 @@ const enviarMensagem = async () => {
     border-color: rgba(234, 179, 8, 0.3);
     color: #fde047;
 }
-
-/* Sugestões */
 .ai-suggestions-wrap {
     display: flex;
     flex-wrap: wrap;
@@ -1402,8 +1586,6 @@ const enviarMensagem = async () => {
     background: var(--c-accent);
     color: white;
 }
-
-/* ✅ Typing bubble — dots + status */
 .typing-bubble {
     display: flex;
     align-items: center;
@@ -1443,8 +1625,6 @@ const enviarMensagem = async () => {
         opacity: 1;
     }
 }
-
-/* ✅ Spinner + texto de status */
 .status-spinner {
     width: 14px;
     height: 14px;
@@ -1459,7 +1639,6 @@ const enviarMensagem = async () => {
         transform: rotate(360deg);
     }
 }
-
 .status-msg-text {
     font-size: 13px;
     font-weight: 500;
@@ -1479,8 +1658,6 @@ const enviarMensagem = async () => {
         transform: translateX(0);
     }
 }
-
-/* FAB */
 .scroll-fab {
     position: fixed;
     bottom: 100px;
@@ -1515,8 +1692,6 @@ const enviarMensagem = async () => {
     opacity: 0;
     transform: translateY(8px);
 }
-
-/* Quiz */
 .quiz-container {
     width: 100%;
     margin-top: 12px;
@@ -1662,8 +1837,33 @@ const enviarMensagem = async () => {
     background: rgba(239, 68, 68, 0.12);
     color: #f87171;
 }
-
-/* Footer */
+.quiz-explanation {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+    font-size: 12px;
+    line-height: 1.5;
+}
+.quiz-explain-btn {
+    margin-top: 8px;
+    padding: 6px 12px;
+    border-radius: 6px;
+    background: var(--c-surface);
+    border: 1px solid var(--c-border);
+    color: var(--c-text2);
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.15s ease;
+}
+.quiz-explain-btn:hover {
+    background: var(--c-accent-l);
+    color: var(--c-accent);
+    border-color: var(--c-accent);
+}
 .app-footer {
     padding: 14px 24px 16px;
     background: var(--c-surface);
@@ -1794,8 +1994,6 @@ const enviarMensagem = async () => {
     margin-top: 7px;
     padding: 0 4px;
 }
-
-/* Prose */
 .prose-content {
     font-family: var(--font-body);
     font-size: 14px;
@@ -1917,5 +2115,125 @@ const enviarMensagem = async () => {
     padding: 20px;
     border-radius: 12px;
     border: 1px solid var(--c-border);
+}
+
+/* 🚀 ESTILOS PARA OS BOTÕES DE CITAÇÃO */
+.citation-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: var(--c-surface2);
+    border: 1px solid var(--c-border2);
+    color: var(--c-text2);
+    font-size: 11px;
+    font-family: var(--font-body);
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 12px;
+    margin: 0 4px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    vertical-align: middle;
+}
+.citation-badge:hover {
+    background: var(--c-accent-l);
+    border-color: var(--c-accent);
+    color: var(--c-accent);
+    transform: translateY(-1px);
+}
+.citation-icon {
+    width: 12px;
+    height: 12px;
+}
+
+/* 🚀 ESTILOS PARA A JANELA MODAL DO PDF */
+.pdf-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(4px);
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.pdf-modal-container {
+    background: var(--c-surface);
+    width: 90%;
+    max-width: 1200px;
+    height: 90vh;
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-lg);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    animation: modalIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.pdf-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 24px;
+    border-bottom: 1px solid var(--c-border);
+    background: var(--c-surface2);
+}
+.pdf-modal-title {
+    font-family: var(--font-head);
+    font-weight: 700;
+    font-size: 16px;
+    color: var(--c-text);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+.pdf-modal-filename {
+    font-family: var(--font-body);
+    font-weight: 500;
+    font-size: 13px;
+    color: var(--c-text2);
+    background: var(--c-surface);
+    padding: 2px 10px;
+    border-radius: 20px;
+    border: 1px solid var(--c-border);
+}
+.pdf-modal-close {
+    background: transparent;
+    border: none;
+    color: var(--c-text2);
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 6px;
+    transition: all 0.15s ease;
+}
+.pdf-modal-close:hover {
+    background: #ef4444;
+    color: white;
+}
+.pdf-modal-iframe {
+    flex: 1;
+    width: 100%;
+    border: none;
+    background: #e5e7eb; /* Cor de fundo neutra caso o PDF demore a carregar */
+}
+@keyframes modalIn {
+    from {
+        opacity: 0;
+        transform: scale(0.95) translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
+}
+.fade-enter-active,
+.fade-leave-active {
+    transition: opacity 0.3s ease;
+}
+.fade-enter-from,
+.fade-leave-to {
+    opacity: 0;
 }
 </style>

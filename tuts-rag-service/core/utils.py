@@ -13,7 +13,7 @@ def sanitizar_input(texto: str) -> str:
 
 def _normalizar_query(texto: str) -> str:
     texto = texto.lower().strip()
-    texto = re.sub(r"[?!.]+$", "", texto)
+    texto = texto.rstrip("?!.")
     return re.sub(r"\s+", " ", texto)
 
 def chave_cache_resposta(uc: str, query: str) -> str:

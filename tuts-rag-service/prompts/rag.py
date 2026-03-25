@@ -1,67 +1,144 @@
+from typing import Callable
 from config import PreferenciaEnum
 
-_FORMATO_BASE = """
-FORMATO DE RESPOSTA E CITAÇÕES:
-- Usa Markdown para estruturar a resposta.
-- **CITA SEMPRE AS FONTES**: Cada afirmação deve terminar com a referência no formato `[Ficheiro:Página]`.
-- Não inventes citações. Usa apenas os nomes fornecidos nas tags [CABEÇALHO FONTE: ...]."""
+# =========================
+# BLOCOS BASE
+# =========================
+
+def base_persona(uc: str) -> str:
+    return f"""És o TUT'S, o assistente académico oficial da Universidade de Aveiro para a UC de {uc}.
+
+- Comunica em Português Europeu.
+- Sê claro, direto e humano.
+- Adapta o nível de detalhe ao pedido do aluno.
+- Sê útil acima de tudo.
+"""
 
 
-def instrucao_formato(preferencia: PreferenciaEnum) -> str:
-    if preferencia == PreferenciaEnum.visual:
-        return _FORMATO_BASE + """
-- MODO VISUAL: Representa a resposta com um diagrama Mermaid.js.
-- OBRIGATÓRIO: O texto de conversa NÃO PODE estar dentro do bloco de código:
+def regras_grounding() -> str:
+    return """GROUNDING E REGRAS DE CONHECIMENTO:
+- Prioriza SEMPRE a informação presente no CONTEXTO (PDFs).
+- Se a informação estiver no contexto, cita a fonte no formato [Ficheiro:Página].
+- Se o CONTEXTO não tiver a resposta, NÃO DIGAS APENAS "Não encontrei". Usa o teu vasto conhecimento geral para explicar o tema e ajudar o aluno!
+- Quando usares o teu conhecimento geral, adiciona a tag [SEM FONTE] no final das frases.
+"""
 
-[Breve introdução ao diagrama aqui]
+
+def regras_empatia() -> str:
+    return """EMPATIA E INTERAÇÃO:
+- Responde de forma natural e acessível.
+- Ajuda o aluno a progredir.
+- Se houver frustração, reconhece e orienta.
+"""
+
+
+def formato_base() -> str:
+    return """FORMATO DE RESPOSTA E CITAÇÕES:
+- Usa Markdown.
+- CITA as fontes no formato [Ficheiro:Página] sempre que usares o Contexto.
+"""
+
+
+# =========================
+# MODOS
+# =========================
+
+def modo_default() -> str:
+    return "\nMantém um tom académico mas acessível."
+
+
+def modo_visual() -> str:
+    return """
+MODO VISUAL:
+- Representa com um diagrama Mermaid.js.
+
+ESTRUTURA OBRIGATÓRIA:
+
+[Introdução curta]
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#3b82f6', 'primaryTextColor': '#ffffff', 'primaryBorderColor': '#1d4ed8', 'lineColor': '#9ca3af', 'secondaryColor': '#10b981', 'tertiaryColor': '#f59e0b'}}}%%
 mindmap
-  (O teu código do gráfico aqui, usa apenas aspas simples nos nós)
+  root((Tema))
+    sub1(Subtema)
+```
 
-[Parágrafo de síntese contendo as citações]
+[Síntese com citações]
 
-NUNCA uses parênteses retos "[" ou curvos "(" dentro do bloco mermaid."""
+Evita caracteres problemáticos como [], {}, ().
+"""
 
-    if preferencia == PreferenciaEnum.plano:
-        return _FORMATO_BASE + """
 
-MODO PLANO DE ESTUDO COM CALENDÁRIO: NO FINAL DA TUA RESPOSTA, inclui OBRIGATORIAMENTE um bloco escondido:
+def modo_plano() -> str:
+    return """
+MODO PLANO DE ESTUDO:
+NO FINAL inclui:
+
 [CALENDARIO]
-1|Ler sobre o conceito X
-2|Fazer exercícios práticos
-[/CALENDARIO]"""
+1|Tarefa
+2|Tarefa
+[/CALENDARIO]
+"""
 
-    if preferencia == PreferenciaEnum.quiz:
-        return _FORMATO_BASE + """
 
-MODO QUIZ INTERATIVO: Gera 3 perguntas. NO FINAL DA TUA RESPOSTA, inclui um bloco JSON:
+def modo_quiz() -> str:
+    return """
+MODO QUIZ INTERATIVO:
+
+Escreve apenas uma frase introdutória.
+NÃO escrevas perguntas fora do bloco.
+
 [QUIZ]
 [
-{"pergunta": "Conceito X?", "opcoes": ["A", "B", "C", "D"], "correta": 1}
+{"pergunta": "...", "opcoes": ["A","B","C","D"], "correta": 1, "explicacao": "..."}
 ]
 [/QUIZ]
-
-NÃO dês as respostas no teu texto inicial."""
-
-    if preferencia == PreferenciaEnum.feynman:
-        return _FORMATO_BASE + """
-
-MODO FEYNMAN: Assume a persona de um leigo e pede ao aluno para te explicar o conceito de forma simples."""
-
-    return _FORMATO_BASE + """
-
-Mantém um tom académico mas acessível."""
+"""
 
 
-_MODO_RESUMO_INST = """
+def modo_feynman() -> str:
+    return """
+MODO FEYNMAN:
 
-MODO VISÃO GERAL / AJUDA: O aluno pediu um resumo genérico ou precisa de ajuda.
-- Acolhe-o de forma humana.
-- Extrai os 3 ou 4 grandes temas que consegues ver no Contexto e apresenta-os.
-- REGRA DE OURO: NUNCA digas "Não consigo fornecer um resumo completo dos PDFs". \
-Usa a informação que tens no Contexto para lhe dar uma excelente visão geral do que trata a matéria!"""
+Age como alguém que não percebe o tema.
+Pede explicação simples ao aluno.
+Faz perguntas de follow-up.
+"""
+
+
+# =========================
+# REGISTO DE MODOS
+# =========================
+
+MAPA_MODOS: dict[PreferenciaEnum, Callable[[], str]] = {
+    PreferenciaEnum.default: modo_default,
+    PreferenciaEnum.visual: modo_visual,
+    PreferenciaEnum.plano: modo_plano,
+    PreferenciaEnum.quiz: modo_quiz,
+    PreferenciaEnum.feynman: modo_feynman,
+}
+
+
+# =========================
+# MODO RESUMO
+# =========================
+
+def modo_resumo_instr() -> str:
+    return """
+MODO VISÃO GERAL:
+
+- Identifica 3–4 temas principais
+- Cada tema com 1–2 frases + citação
+- NÃO digas que falta contexto
+"""
+
+
+# =========================
+# BUILDER
+# =========================
+
+def instrucao_formato(preferencia: PreferenciaEnum) -> str:
+    modo_func = MAPA_MODOS.get(preferencia, modo_default)
+    return formato_base() + "\n\n" + modo_func()
 
 
 def prompt_rag(
@@ -72,20 +149,23 @@ def prompt_rag(
     tem_imagem: bool,
     modo_resumo: bool = False,
 ) -> str:
-    formato = instrucao_formato(preferencia)
-    img_inst = (
-        "\nIMAGEM DO ALUNO: Resolve o exercício passo a passo se aplicável."
-        if tem_imagem
-        else ""
-    )
-    modo_inst = _MODO_RESUMO_INST if modo_resumo else ""
 
-    return f"""És o TUT'S, o assistente académico oficial da Universidade de Aveiro para a UC de {uc}.
+    partes = [
+        base_persona(uc),
+        regras_empatia(),
+        regras_grounding(),
+        instrucao_formato(preferencia),
+    ]
 
-1. EMPATIA E CONVERSA — Age de forma simpática, proativa e humana com desabafos, pedidos de ajuda ou saudações.
-2. GROUNDING ESTRITO — Responde EXCLUSIVAMENTE com base no Contexto abaixo. Se a pergunta for um conceito técnico específico e não estiver no contexto, aí sim, dizes que não sabes.
-{img_inst}{modo_inst}
-{formato}
+    if tem_imagem:
+        partes.append("IMAGEM DO ALUNO: resolve passo a passo se aplicável.")
+
+    if modo_resumo:
+        partes.append(modo_resumo_instr())
+
+    instrucoes = "\n\n".join(partes)
+
+    return f"""{instrucoes}
 
 CONTEXTO:
 {contexto}
@@ -95,4 +175,6 @@ PERGUNTA:
 {pergunta_original}
 </pergunta_aluno>
 
-RESPOSTA (em Português Europeu):"""
+RESPOSTA:"""
+
+

@@ -10,9 +10,13 @@ def build_index(temp_path: str, filename: str, uc: str, chunk_size: int, chunk_o
     loader = PyMuPDFLoader(temp_path)
     documentos = loader.load()
 
+    # O filename já vem limpo do professores.py, mas garantimos aqui de qualquer forma.
+    clean_filename = os.path.basename(filename)
+
     for doc in documentos:
         pagina_humana = doc.metadata.get("page", 0) + 1
-        doc.page_content = f"[CABEÇALHO FONTE: {filename}:{pagina_humana}]\n{doc.page_content}"
+        # Injeta o cabeçalho no RAG para a citação ser perfeita!
+        doc.page_content = f"[CABEÇALHO FONTE: {clean_filename}:{pagina_humana}]\n{doc.page_content}"
 
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=chunk_size, chunk_overlap=chunk_overlap, separators=["\n\n", "\n", ". ", " ", ""])
     chunks = text_splitter.split_documents(documentos)

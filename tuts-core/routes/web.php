@@ -1,27 +1,25 @@
 <?php
 
-use App\Http\Controllers\ProfileController;
-use Illuminate\Foundation\Application;
+use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\ChatController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
-Route::get('/', function () {
-    return Inertia::render('Welcome', [
-        'canLogin' => Route::has('login'),
-        'canRegister' => Route::has('register'),
-        'laravelVersion' => Application::VERSION,
-        'phpVersion' => PHP_VERSION,
-    ]);
+// Auth
+Route::post('/api/login',  [AuthController::class, 'login']);
+Route::post('/api/logout', [AuthController::class, 'logout']);
+
+// Chat + me — protegidas pela sessão web
+Route::middleware('auth')->group(function () {
+    Route::get('/api/me',           [AuthController::class, 'me']);
+    Route::post('/api/chat/stream', [ChatController::class, 'enviarPerguntaStream']);
+    Route::post('/api/chat',        [ChatController::class, 'criarChat']);
+    Route::get('/api/chat/ucs',     [ChatController::class, 'listarChatsPorUC']);
+    Route::get('/api/chat/{id}',    [ChatController::class, 'obterHistorico']);
 });
 
-Route::get('/dashboard', function () {
-    return Inertia::render('Dashboard');
-})->middleware(['auth', 'verified'])->name('dashboard');
-
-Route::middleware('auth')->group(function () {
-    Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
-    Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
-    Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
+Route::get('/', function () {
+    return Inertia::render('Welcome');
 });
 
 require __DIR__.'/auth.php';

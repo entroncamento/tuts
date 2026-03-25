@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     iaedu_channel_id: str
     professor_api_key: str
 
+    internal_token: str
+    frontend_origin: str = "http://localhost:5173"
+
     uc_json_path: str = "database/data/cadeiras_mtc.json"
 
     faiss_k: int = 8
@@ -59,15 +62,15 @@ def _carregar_ucs(path: str) -> type[Enum]:
         with open(path, encoding="utf-8") as f:
             dados = json.load(f)
         membros = {entry["nome_uc"]: entry["nome_uc"] for entry in dados}
-        logger.info("UCs carregadas do JSON: %d UCs encontradas.", len(membros))
         return Enum("UCEnum", membros)
     except FileNotFoundError:
-        raise RuntimeError(f"CRITICAL: Ficheiro de UCs não encontrado em '{path}'")
+        raise RuntimeError(f"CRITICAL: Ficheiro não encontrado em '{path}'")
 
 UCEnum = _carregar_ucs(settings.uc_json_path)
 
+# APENAS OS 5 MODOS ORIGINAIS (COM DEFAULT)
 class PreferenciaEnum(str, Enum):
-    textual = "textual"
+    default = "default"
     visual  = "visual"
     plano   = "plano"
     quiz    = "quiz"

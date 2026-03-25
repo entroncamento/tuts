@@ -56,6 +56,9 @@ async def executar_retrieval(queries: list[str], vs: FAISS, bm25: BM25Retriever,
 async def executar_reranking(docs: list, texto_final: str, final_k: int) -> tuple[list[str], float, float]:
     loop = asyncio.get_running_loop()
     t0 = time.perf_counter()
+
+    logger.info(f"[RERANK] docs recebidos: {len(docs)}")
+
     paragrafos = []
     for doc in docs[:15]:
         linhas = doc.page_content.split("\n")
@@ -67,10 +70,14 @@ async def executar_reranking(docs: list, texto_final: str, final_k: int) -> tupl
     if not paragrafos:
         paragrafos = [doc.page_content for doc in docs[:10]]
 
+    logger.info(f"[RERANK] parágrafos para reranking: {len(paragrafos)}")
+
     pares = [[texto_final, p] for p in paragrafos]
     notas = await loop.run_in_executor(executor, reranker.predict, pares)
     pars_ordenados = sorted(zip(paragrafos, notas), key=lambda x: x[1], reverse=True)
-    
+
+    logger.info(f"[RERANK] top scores: {[round(s,2) for _,s in pars_ordenados[:5]]}")
+
     textos_finais = [p for p, score in pars_ordenados[:final_k] if score > settings.score_minimo]
     score_max = float(pars_ordenados[0][1]) if pars_ordenados else 0.0
     return textos_finais, score_max, time.perf_counter() - t0

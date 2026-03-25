@@ -37,12 +37,11 @@ async def perguntar(
     uc: Annotated[UCEnum, Form(...)],
     x_internal_token: Annotated[str, Header()],
     thread_id: Annotated[str | None, Form()] = None,
-    preferencia: Annotated[PreferenciaEnum, Form()] = PreferenciaEnum.textual,
+    preferencia: Annotated[PreferenciaEnum, Form()] = PreferenciaEnum.default,
     historico: Annotated[str, Form()] = "[]",
     imagem: Annotated[UploadFile | None, File()] = None,
 ):
-    # 🛡️ Proteção interna
-    if x_internal_token != "TUTS_SUPER_SECRET_123":
+    if x_internal_token != settings.internal_token:
         raise HTTPException(status_code=403, detail="Acesso negado. Token interno inválido.")
 
     if not thread_id or thread_id == "string":
@@ -61,7 +60,6 @@ async def perguntar(
     if vs is None:
         raise HTTPException(status_code=400, detail=f"Ainda não existem documentos para a UC: {uc_nome}.")
 
-    # ── Pré-processamento síncrono (rápido, antes do stream) ──────────────────
     texto_final_aluno = sanitizar_input(texto)
     tem_imagem = False
 
@@ -84,21 +82,14 @@ async def perguntar(
                 yield "data: [DONE]\n\n"
             return StreamingResponse(cached_generator(), media_type="text/event-stream")
 
-    # ── Histórico ─────────────────────────────────────────────────────────────
     try:
         mensagens_historico = json.loads(historico)
     except Exception:
         mensagens_historico = []
 
-    # ══════════════════════════════════════════════════════════════════════════
-    # Generator principal — tudo o que demora acontece AQUI dentro,
-    # permitindo enviar status_msg em tempo real para o frontend.
-    # ══════════════════════════════════════════════════════════════════════════
     async def event_generator():
-        # 1. Metadados iniciais (sem_contexto ainda desconhecido → False por defeito)
         yield sse({"status": "sucesso", "thread_id": thread_id, "sem_contexto": False})
 
-        # 2. Expandir queries / detectar modo resumo
         yield sse({"status_msg": "🧩 A interpretar a tua pergunta..."})
         modo_resumo      = e_pergunta_de_resumo(texto_final_aluno)
         queries_pesquisa = await expandir_queries(
@@ -106,7 +97,6 @@ async def perguntar(
             uc_nome, mensagens_historico, thread_id, request
         )
 
-        # 3. Retrieval híbrido
         yield sse({"status_msg": "🔍 A pesquisar nos documentos da UC..."})
         bm25 = await get_bm25_retriever(uc_limpa)
         docs_hibridos, _ = await executar_retrieval(
@@ -114,17 +104,13 @@ async def perguntar(
             settings.faiss_k * 2 if modo_resumo else settings.faiss_k
         )
 
-        # 4. Reranking
         yield sse({"status_msg": "📄 A ler e analisar os PDFs..."})
         textos_finais, _, _ = await executar_reranking(
             docs_hibridos, texto_final_aluno,
             settings.final_k * 3 if modo_resumo else settings.final_k * 2
         )
 
-        # 5. Construir contexto e prompt
         flag_sem_contexto = not textos_finais and not modo_resumo
-
-        # Actualiza o flag no frontend agora que já sabemos
         yield sse({"sem_contexto": flag_sem_contexto})
 
         if flag_sem_contexto:
@@ -141,7 +127,6 @@ async def perguntar(
             preferencia, tem_imagem, modo_resumo
         )
 
-        # 6. Streaming da IA
         full_response = ""
         from services.iaedu import chamar_iaedu_stream
 
@@ -155,10 +140,8 @@ async def perguntar(
             full_response += erro_msg
             yield sse({"chunk": erro_msg})
 
-        # 7. Fim do stream
         yield "data: [DONE]\n\n"
 
-        # 8. Pós-stream: calendário e cache
         if preferencia == PreferenciaEnum.plano and "[CALENDARIO]" in full_response:
             disparar_background(
                 processar_calendario(full_response, uc_nome, executor, loop),
@@ -174,6 +157,7 @@ async def perguntar(
             "sem_contexto":      flag_sem_contexto,
             "fontes_consultadas": list(set(re.findall(r"\[(.*?:\d+)\]", full_response))),
         }
-        semantic_cache[uc_limpa].append({"emb": query_emb, "resposta": copy.deepcopy(resposta_final)})
+        if full_response and len(full_response.strip()) > 20:
+            semantic_cache[uc_limpa].append({"emb": query_emb, "resposta": copy.deepcopy(resposta_final)})
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
