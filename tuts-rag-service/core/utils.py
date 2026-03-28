@@ -1,5 +1,4 @@
 import re
-import hashlib
 import numpy as np
 import unicodedata
 
@@ -10,15 +9,6 @@ def limpar_nome_uc(uc: str) -> str:
 
 def sanitizar_input(texto: str) -> str:
     return re.sub(r"</?pergunta_aluno>", "", texto).strip()
-
-def _normalizar_query(texto: str) -> str:
-    texto = texto.lower().strip()
-    texto = texto.rstrip("?!.")
-    return re.sub(r"\s+", " ", texto)
-
-def chave_cache_resposta(uc: str, query: str) -> str:
-    query_normalizada = _normalizar_query(query)
-    return hashlib.sha256(f"{uc}|{query_normalizada}".encode()).hexdigest()
 
 def cosine_similarity(v1: list[float], v2: list[float]) -> float:
     a, b = np.asarray(v1, dtype=np.float32), np.asarray(v2, dtype=np.float32)

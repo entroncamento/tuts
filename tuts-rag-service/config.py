@@ -14,6 +14,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("tuts")
 
+
 class Settings(BaseSettings):
     iaedu_api_key: str
     iaedu_agent_id: str
@@ -34,10 +35,7 @@ class Settings(BaseSettings):
     chunk_overlap: int = 250
     max_upload_mb: int = 50
 
-    resposta_cache_ttl: int = 300
-    resposta_cache_size: int = 512
     semantic_cache_threshold: float = 0.92
-    semantic_cache_maxsize: int = 100
 
     embedding_model: str = "paraphrase-multilingual-MiniLM-L12-v2"
     reranker_model: str = "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"
@@ -45,10 +43,16 @@ class Settings(BaseSettings):
     rrf_k: int = 60
     base_faiss_dir: str = "faiss_db"
     sqlite_db: str = "tuts_logs.db"
-    server_host: str = "127.0.0.1"
+    server_host: str = "0.0.0.0"
     server_port: int = 8001
 
+    # Redis — cache semântico persistente
+    redis_host: str = "localhost"
+    redis_port: int = 6379
+    redis_cache_ttl_dias: int = 7
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
 
 try:
     settings = Settings()
@@ -57,6 +61,7 @@ except Exception as exc:
 
 limiter = Limiter(key_func=get_remote_address)
 
+
 def _carregar_ucs(path: str) -> type[Enum]:
     try:
         with open(path, encoding="utf-8") as f:
@@ -64,11 +69,14 @@ def _carregar_ucs(path: str) -> type[Enum]:
         membros = {entry["nome_uc"]: entry["nome_uc"] for entry in dados}
         return Enum("UCEnum", membros)
     except FileNotFoundError:
-        raise RuntimeError(f"CRITICAL: Ficheiro não encontrado em '{path}'")
+        raise RuntimeError(f"CRITICAL: Ficheiro de UCs não encontrado em '{path}'") from None
+    except (json.JSONDecodeError, KeyError) as exc:
+        raise RuntimeError(f"CRITICAL: Formato inválido no ficheiro de UCs — {exc}") from exc
+
 
 UCEnum = _carregar_ucs(settings.uc_json_path)
 
-# APENAS OS 5 MODOS ORIGINAIS (COM DEFAULT)
+
 class PreferenciaEnum(str, Enum):
     default = "default"
     visual  = "visual"

@@ -1,4 +1,5 @@
 import asyncio
+from typing import Coroutine, Any
 from config import logger
 
 def _cb_log_erro(task: asyncio.Future, nome: str) -> None:
@@ -9,6 +10,6 @@ def _cb_log_erro(task: asyncio.Future, nome: str) -> None:
     except asyncio.CancelledError:
         pass
 
-def disparar_background(future: asyncio.Future, nome: str) -> None:
-    task = asyncio.ensure_future(future)
+def disparar_background(coro: Coroutine[Any, Any, Any], nome: str) -> None:
+    task = asyncio.ensure_future(coro)
     task.add_done_callback(lambda t: _cb_log_erro(t, nome))

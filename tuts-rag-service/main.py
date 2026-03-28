@@ -7,20 +7,24 @@ from fastapi.staticfiles import StaticFiles
 from slowapi.errors import RateLimitExceeded
 from slowapi import _rate_limit_exceeded_handler
 
-from config import settings, logger
+from config import settings, logger, limiter
 from core.ml_models import executor
+from core.cache import init_redis_index
 from routers.sistema import router as router_sistema
 from routers.professores import router as router_professores
 from routers.alunos import router as router_alunos
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    await init_redis_index()
     app.state.http_client = httpx.AsyncClient()
     logger.info("TUT's RAG API iniciado.")
     yield
-    await app.state.http_client.aclose()
     executor.shutdown(wait=True)
+    await app.state.http_client.aclose()
     logger.info("Servidor encerrado.")
+
 
 app = FastAPI(title="TUT's RAG API", lifespan=lifespan)
 
@@ -35,7 +39,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-from config import limiter
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
@@ -51,4 +54,4 @@ app.include_router(router_alunos)
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=settings.server_port)
+    uvicorn.run("main:app", host=settings.server_host, port=settings.server_port, reload=False)

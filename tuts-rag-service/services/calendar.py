@@ -3,7 +3,6 @@ import asyncio
 import datetime
 
 from config import logger
-from core.background import disparar_background
 
 try:
     from calendar_service import obter_servico_calendario
@@ -38,16 +37,18 @@ async def processar_calendario(resposta_limpa: str, uc_nome: str, executor, loop
                         data_evento = agora + datetime.timedelta(days=dia_offset)
                         start_time = data_evento.replace(hour=10, minute=0, second=0, microsecond=0)
                         end_time = start_time + datetime.timedelta(hours=2)
+                        
                         evento_dict = {
                             "summary":     f"📚 Estudo {uc_nome}: {tema}",
-                            "description": f"Plano de estudo gerado pelo TUTs.",
+                            "description": f"Plano de estudo gerado pelo TUT'S.",
                             "start": {"dateTime": start_time.isoformat(), "timeZone": "Europe/Lisbon"},
                             "end":   {"dateTime": end_time.isoformat(),   "timeZone": "Europe/Lisbon"},
                         }
-                        # Correcção: run_in_executor devolve uma Future — não envolver
-                        # em disparar_background (que chamaria ensure_future numa Future,
-                        # criando wrapping desnecessário). Disparamos directamente.
-                        loop.run_in_executor(executor, _criar_evento_google_sync, service, evento_dict)
+                        
+                        # 🚀 AQUI ESTÁ A MAGIA!
+                        # Await garante que o Google Calendar recebe o evento antes do loop seguir em frente.
+                        await loop.run_in_executor(executor, _criar_evento_google_sync, service, evento_dict)
+                        
                     except ValueError:
                         continue
 
@@ -55,4 +56,5 @@ async def processar_calendario(resposta_limpa: str, uc_nome: str, executor, loop
         resposta_limpa += "\n\n📅 **Os blocos de estudo foram agendados!**"
     except Exception as exc:
         logger.error("Erro no Calendário: %s", exc)
+    
     return resposta_limpa
