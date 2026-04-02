@@ -1,0 +1,20 @@
+# Ambientes Virtuais
+venv/
+env/
+.env
+
+# Cache do Python
+__pycache__/
+*.pyc
+
+# Bases de Dados e Índices (Não subir ficheiros pesados!)
+tuts_logs.db
+faiss_db/
+database/data/
+
+# Dependências do Node (caso tenhas frontend misturado)
+node_modules/
+
+# Ficheiros de credenciais do Google Calendar
+credentials.json
+token.json
