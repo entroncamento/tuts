@@ -21,8 +21,10 @@
         "vue": "^3.4.0"
     },
     "dependencies": {
+        "chart.js": "^4.5.1",
         "dompurify": "^3.3.3",
         "marked": "^17.0.4",
-        "mermaid": "^11.13.0"
+        "mermaid": "^11.13.0",
+        "vue-chartjs": "^5.3.3"
     }
 }

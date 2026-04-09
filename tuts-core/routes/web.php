@@ -26,4 +26,9 @@ Route::get('/', function () {
     return Inertia::render('Welcome');
 });
 
+// 🔥 A ROTA DO GOD MODE ENTRA AQUI! 🔥
+Route::get('/dashboard-professor', function () {
+    return Inertia::render('DashboardProfessor');
+});
+
 require __DIR__ . '/auth.php';

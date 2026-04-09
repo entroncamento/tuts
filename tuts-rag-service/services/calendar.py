@@ -39,7 +39,7 @@ async def processar_calendario(resposta_limpa: str, uc_nome: str, executor, loop
                         end_time = start_time + datetime.timedelta(hours=2)
                         
                         evento_dict = {
-                            "summary":     f"📚 Estudo {uc_nome}: {tema}",
+                            "summary":     f"Estudo {uc_nome}: {tema}",
                             "description": f"Plano de estudo gerado pelo TUT'S.",
                             "start": {"dateTime": start_time.isoformat(), "timeZone": "Europe/Lisbon"},
                             "end":   {"dateTime": end_time.isoformat(),   "timeZone": "Europe/Lisbon"},
@@ -53,7 +53,7 @@ async def processar_calendario(resposta_limpa: str, uc_nome: str, executor, loop
                         continue
 
         resposta_limpa = re.sub(r"\[CALENDARIO\].*?\[/CALENDARIO\]", "", resposta_limpa, flags=re.DOTALL).strip()
-        resposta_limpa += "\n\n📅 **Os blocos de estudo foram agendados!**"
+        resposta_limpa += "\n\n**Os blocos de estudo foram agendados!**"
     except Exception as exc:
         logger.error("Erro no Calendário: %s", exc)
     

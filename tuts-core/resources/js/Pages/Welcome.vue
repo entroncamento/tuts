@@ -83,7 +83,7 @@
             </aside>
 
             <div
-                class="main-area flex flex-col flex-1 h-screen overflow-hidden"
+                class="main-area flex flex-col flex-1 h-screen overflow-hidden relative"
             >
                 <header class="app-header">
                     <div class="header-left">
@@ -193,7 +193,11 @@
                     <div
                         v-for="(msg, index) in mensagens"
                         :key="index"
-                        v-show="msg.role === 'user' || msg.content.length > 0"
+                        v-show="
+                            msg.role === 'user' ||
+                            msg.content.length > 0 ||
+                            (msg.quiz && msg.quiz.length > 0)
+                        "
                         :class="[
                             'msg-row',
                             msg.role === 'user'
@@ -259,7 +263,12 @@
                                             ? 'streaming-cursor'
                                             : '',
                                     ]"
-                                    v-html="renderMarkdown(msg.content)"
+                                    v-html="
+                                        renderMarkdown(
+                                            msg.content,
+                                            aCarregar && index === indiceAtivo,
+                                        )
+                                    "
                                 ></div>
                             </div>
 
@@ -367,9 +376,7 @@
                                         v-for="(opcao, oi) in pergunta.opcoes"
                                         :key="oi"
                                         @click="responderQuiz(msg, qi, oi)"
-                                        :disabled="
-                                            msg.respostas[qi] !== undefined
-                                        "
+                                        :disabled="msg.respostas[qi] !== -1"
                                         :class="[
                                             'quiz-option',
                                             getQuizButtonClass(msg, qi, oi),
@@ -382,7 +389,7 @@
                                     </button>
                                 </div>
                                 <div
-                                    v-if="msg.respostas[qi] !== undefined"
+                                    v-if="msg.respostas[qi] !== -1"
                                     :class="[
                                         'quiz-feedback',
                                         msg.respostas[qi] === pergunta.correta
@@ -452,6 +459,29 @@
                     </div>
                 </main>
 
+                <transition name="fade-up">
+                    <button
+                        v-if="aCarregar"
+                        @click="pararGeracao"
+                        class="stop-btn"
+                    >
+                        <svg
+                            class="w-4 h-4"
+                            fill="currentColor"
+                            viewBox="0 0 24 24"
+                        >
+                            <rect
+                                x="6"
+                                y="6"
+                                width="12"
+                                height="12"
+                                rx="2"
+                            ></rect>
+                        </svg>
+                        Parar de gerar
+                    </button>
+                </transition>
+
                 <Transition name="fab">
                     <button
                         v-if="mostrarScrollBtn"
@@ -507,13 +537,14 @@
                                 @change="lidarComImagem"
                             />
                         </label>
+                        <!-- ✅ ALTERAÇÃO: placeholder dinâmico consoante o modo -->
                         <textarea
                             v-model="mensagemAtual"
                             @keydown.enter.exact.prevent="enviarMensagem"
                             @input="autoResize"
                             ref="textareaRef"
                             rows="1"
-                            placeholder="Faz uma pergunta... (Enter envia, Shift+Enter nova linha)"
+                            :placeholder="placeholderTexto"
                             class="chat-textarea"
                         ></textarea>
                         <div class="input-right">
@@ -544,7 +575,7 @@
                                         stroke-linecap="round"
                                         stroke-linejoin="round"
                                         stroke-width="2"
-                                        d="M5 12h14M12 5l7 7-7 7"
+                                        d="M5 12h14M12 5l7 7-7-7"
                                     />
                                 </svg>
                             </button>
@@ -613,11 +644,11 @@ import Login from "./Login.vue";
 mermaid.initialize({ startOnLoad: false, theme: "base" });
 
 const modos = [
-    { value: "default", icon: "📖", label: "Tutor" },
-    { value: "visual", icon: "🎨", label: "Visual" },
-    { value: "plano", icon: "📅", label: "Plano" },
-    { value: "quiz", icon: "🎮", label: "Quiz" },
-    { value: "feynman", icon: "🧠", label: "Feynman" },
+    { value: "default", label: "Tutor" },
+    { value: "visual", label: "Visual" },
+    { value: "plano", label: "Plano" },
+    { value: "quiz", label: "Quiz" },
+    { value: "feynman", label: "Feynman" },
 ];
 
 const listaUCs = ref(cadeirasDados.map((c) => c.nome_uc));
@@ -638,7 +669,10 @@ const indiceAtivo = ref(-1);
 const statusMsg = ref("");
 const utilizador = ref(null);
 
-// 🚀 Variáveis do Leitor de PDF
+// 🔥 Variável do Travão de Mão
+const abortController = ref(null);
+
+// Variáveis do Leitor de PDF
 const pdfModalAberto = ref(false);
 const pdfUrlAtual = ref("");
 const pdfFicheiroAtual = ref("");
@@ -649,18 +683,16 @@ const fecharPdf = () => {
     pdfFicheiroAtual.value = "";
 };
 
-// 🚀 Detetor de Cliques nas Citações Geradas
 const lidarComCliqueCitacao = (event) => {
     const btn = event.target.closest(".citation-badge");
     if (btn) {
-        const ficheiro = btn.getAttribute("data-ficheiro").trim();
+        let ficheiro = btn.getAttribute("data-ficheiro").trim();
         const pagina = btn.getAttribute("data-pagina").trim();
 
-        pdfFicheiroAtual.value = ficheiro;
+        ficheiro = ficheiro.replace(/^Ficheiro:\s*/i, "");
 
-        // Caminho padrão do Laravel para ficheiros públicos.
-        // O Laravel serve da pasta "public/storage/pdfs" através da rota /storage/pdfs
-        pdfUrlAtual.value = `/pdfs/${encodeURIComponent(ficheiro)}#page=${pagina}`;
+        pdfFicheiroAtual.value = ficheiro;
+        pdfUrlAtual.value = `http://localhost:8000/pdfs/${encodeURIComponent(ficheiro)}#page=${pagina}`;
         pdfModalAberto.value = true;
     }
 };
@@ -668,12 +700,31 @@ const lidarComCliqueCitacao = (event) => {
 const modoAtual = computed(() =>
     modos.find((m) => m.value === preferencia.value),
 );
-const sugestoes = computed(() => [
-    `Explica os conceitos base de ${ucAtual.value}`,
-    `Cria um resumo dos tópicos mais importantes`,
-    `Faz-me um quiz sobre ${ucAtual.value}`,
-    `Qual é o melhor plano de estudo?`,
-]);
+
+// ✅ ALTERAÇÃO 1: placeholder dinâmico consoante o modo ativo
+const placeholderTexto = computed(() => {
+    if (preferencia.value === "feynman")
+        return "🧠 Explica o conceito com as tuas palavras... o Tut's vai avaliar-te!";
+    return "Faz uma pergunta... (Enter envia, Shift+Enter nova linha)";
+});
+
+// ✅ ALTERAÇÃO 2: sugestões contextuais consoante o modo ativo
+const sugestoes = computed(() => {
+    if (preferencia.value === "feynman") {
+        return [
+            `Explica-me o que é ${ucAtual.value} com as tuas palavras`,
+            `Tenta descrever o conceito mais importante desta UC`,
+            `Explica-me como se eu tivesse 10 anos`,
+            `Começa pelo início — o que sabes sobre este tema?`,
+        ];
+    }
+    return [
+        `Explica os conceitos base de ${ucAtual.value}`,
+        `Cria um resumo dos tópicos mais importantes`,
+        `Faz-me um quiz sobre ${ucAtual.value}`,
+        `Qual é o melhor plano de estudo?`,
+    ];
+});
 
 function getCsrfToken() {
     const match = document.cookie.match(/XSRF-TOKEN=([^;]+)/);
@@ -748,7 +799,6 @@ const lidarComImagem = (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    // Criar um leitor para carregar a imagem na memória do browser
     const reader = new FileReader();
     reader.readAsDataURL(file);
     reader.onload = (event) => {
@@ -756,14 +806,12 @@ const lidarComImagem = (e) => {
         img.src = event.target.result;
 
         img.onload = () => {
-            // Criar um canvas (tela) escondido para redimensionar a imagem
             const canvas = document.createElement("canvas");
-            const MAX_WIDTH = 1200; // Resolução ideal para o OCR ler bem as letras
+            const MAX_WIDTH = 1200;
             const MAX_HEIGHT = 1200;
             let width = img.width;
             let height = img.height;
 
-            // Lógica para manter a proporção da imagem
             if (width > height) {
                 if (width > MAX_WIDTH) {
                     height *= MAX_WIDTH / width;
@@ -781,32 +829,20 @@ const lidarComImagem = (e) => {
             const ctx = canvas.getContext("2d");
             ctx.drawImage(img, 0, 0, width, height);
 
-            // Converter o canvas de volta para um ficheiro leve (JPEG com 80% de qualidade)
             canvas.toBlob(
                 (blob) => {
-                    // Se a conversão falhar (alguns browsers antigos), usa o original
                     if (!blob) {
                         imagemFicheiro.value = file;
                         imagemPreview.value = URL.createObjectURL(file);
                         return;
                     }
-
-                    // Cria o ficheiro final otimizado
                     const compressedFile = new File(
                         [blob],
                         file.name.replace(/\.[^/.]+$/, "") + ".jpg",
-                        {
-                            type: "image/jpeg",
-                            lastModified: Date.now(),
-                        },
+                        { type: "image/jpeg", lastModified: Date.now() },
                     );
-
                     imagemFicheiro.value = compressedFile;
                     imagemPreview.value = URL.createObjectURL(compressedFile);
-
-                    console.log(
-                        `🖼️ Imagem otimizada: de ${(file.size / 1024 / 1024).toFixed(2)}MB para ${(compressedFile.size / 1024 / 1024).toFixed(2)}MB`,
-                    );
                 },
                 "image/jpeg",
                 0.8,
@@ -829,27 +865,78 @@ const copiarMensagem = async (content, index) => {
     copiado.value = index;
     setTimeout(() => (copiado.value = null), 2000);
 };
+
+// ✅ QUIZ: usa -1 como sentinela em vez de undefined
 const responderQuiz = (msg, pi, oi) => {
     msg.respostas[pi] = oi;
 };
 const quizFinalizado = (msg) =>
     msg.quiz &&
     msg.respostas &&
-    msg.respostas.filter((r) => r !== undefined).length === msg.quiz.length;
+    msg.respostas.filter((r) => r !== -1).length === msg.quiz.length;
 const pontuacaoQuiz = (msg) =>
     msg.respostas.filter((r, i) => r === msg.quiz[i].correta).length;
 const getQuizButtonClass = (msg, qi, oi) => {
-    if (msg.respostas[qi] === undefined) return "quiz-option--default";
+    if (msg.respostas[qi] === -1) return "quiz-option--default";
     if (oi === msg.quiz[qi].correta) return "quiz-option--correct";
     if (msg.respostas[qi] === oi) return "quiz-option--wrong";
     return "quiz-option--inactive";
 };
 
-const renderMarkdown = (texto) => {
+// 🔥 Função de Travão de Mão
+const pararGeracao = () => {
+    if (abortController.value) {
+        abortController.value.abort();
+        abortController.value = null;
+        aCarregar.value = false;
+        indiceAtivo.value = -1;
+        statusMsg.value = "";
+
+        const lastMsg = mensagens.value[mensagens.value.length - 1];
+        if (lastMsg && lastMsg.role === "ai") {
+            lastMsg.content += "\n\n*[Geração interrompida]*";
+        }
+    }
+};
+
+// ---------------------------------------------------------------------------
+// renderMarkdown — com suporte a streaming de Mermaid E CAMALEÃO
+// ---------------------------------------------------------------------------
+const renderMarkdown = (texto, isStreaming = false) => {
     const str = texto || "";
     if (!str.trim()) return "";
     try {
+        if (isStreaming) {
+            const abertos = (str.match(/```mermaid/g) || []).length;
+            const fechados = (str.match(/```mermaid[\s\S]*?```/g) || []).length;
+            if (abertos > fechados) {
+                const semMermaid = str.replace(/```mermaid[\s\S]*$/, "");
+                return DOMPurify.sanitize(
+                    marked.parse(semMermaid) +
+                        '<div class="mermaid-loading"><span class="mermaid-spinner"></span>A gerar diagrama...</div>',
+                    { ADD_ATTR: ["class"], ADD_TAGS: ["div", "span"] },
+                );
+            }
+        }
+
+        // 🦎 MAGIA DO CAMALEÃO: Raciocínio (DeepSeek R1)
         let processado = str.replace(
+            /<think>([\s\S]*?)(?:<\/think>|$)/gi,
+            (match, pensamento) => {
+                const safePensamento = pensamento.trim();
+                if (!safePensamento) return "";
+                return `<details class="camaleao-think">
+                    <summary class="camaleao-summary">
+                        <span class="camaleao-icon">🦎</span>
+                        <span class="camaleao-title">Raciocínio em 360º</span>
+                        <span class="camaleao-pulse"></span>
+                    </summary>
+                    <div class="camaleao-content">${safePensamento.replace(/\n/g, "<br>")}</div>
+                </details>\n\n`;
+            },
+        );
+
+        processado = processado.replace(
             /```mermaid\n([\s\S]*?)```/g,
             (_, codigo) => {
                 const safe = codigo
@@ -859,8 +946,6 @@ const renderMarkdown = (texto) => {
             },
         );
 
-        // 🚀 REGEX APRIMORADO: Apanha citações com ou sem espaços
-        // Pega em formatos como [Ficheiro.pdf: 1], [Ficheiro.pdf :1], etc.
         processado = processado.replace(
             /\[([^\]]+?)\s*:\s*(\d+)\s*\]/g,
             (match, ficheiro, pagina) => {
@@ -875,7 +960,7 @@ const renderMarkdown = (texto) => {
 
         return DOMPurify.sanitize(marked.parse(processado), {
             ADD_ATTR: ["class", "data-ficheiro", "data-pagina", "title"],
-            ADD_TAGS: ["svg", "path", "button"],
+            ADD_TAGS: ["svg", "path", "button", "details", "summary"],
         });
     } catch (e) {
         return str;
@@ -892,7 +977,6 @@ const desenharGraficos = async () => {
 };
 
 const enviarMensagem = async () => {
-    // 🛡️ GUARDA DE SEGURANÇA: Impede duplo-disparo instantâneo se já estiver a carregar
     if (aCarregar.value) return;
     if (!mensagemAtual.value.trim() && !imagemFicheiro.value) return;
 
@@ -929,8 +1013,11 @@ const enviarMensagem = async () => {
     formData.append("texto", textoUser || "Analisa a imagem em anexo.");
     formData.append("uc", ucAtual.value);
     formData.append("preferencia", preferencia.value);
+
     if (imagemFicheiro.value) formData.append("imagem", imagemFicheiro.value);
     removerImagem();
+
+    abortController.value = new AbortController();
 
     try {
         const resposta = await fetch("/api/chat/stream", {
@@ -942,6 +1029,7 @@ const enviarMensagem = async () => {
                 "X-XSRF-TOKEN": getCsrfToken(),
             },
             body: formData,
+            signal: abortController.value.signal,
         });
 
         if (resposta.status === 401 || resposta.redirected) {
@@ -1006,27 +1094,37 @@ const enviarMensagem = async () => {
             .replace(/\[SUGEST[OÕ]ES\][\s\S]*?\[\/SUGEST[OÕ]ES\]/gi, "")
             .trim();
 
+        // ✅ QUIZ PARSER ROBUSTO
         const quizMatch = textoIA.match(/\[QUIZ\]([\s\S]*?)\[\/QUIZ\]/i);
         if (quizMatch) {
             try {
                 let jsonCru = quizMatch[1].trim();
+
+                // Remove blocos ```json ... ``` ou ``` ... ``` (com ou sem newlines)
                 jsonCru = jsonCru
-                    .replace(/^```(json)?\s*/i, "")
-                    .replace(/\s*```$/i, "")
+                    .replace(/^```(?:json)?\s*/im, "")
+                    .replace(/\s*```\s*$/im, "")
                     .trim();
 
+                // Extrai o array JSON mesmo que haja texto extra à volta
+                const arrayMatch = jsonCru.match(/(\[[\s\S]*\])/);
+                if (arrayMatch) jsonCru = arrayMatch[1];
+
                 const qData = JSON.parse(jsonCru);
-                mensagens.value[indiceIA].quiz = qData;
-                mensagens.value[indiceIA].respostas = new Array(qData.length);
+
+                if (Array.isArray(qData) && qData.length > 0) {
+                    mensagens.value[indiceIA].quiz = qData;
+                    // ✅ Array reativo com -1 como sentinela (não esparso)
+                    mensagens.value[indiceIA].respostas = Array(
+                        qData.length,
+                    ).fill(-1);
+                }
             } catch (e) {
-                console.warn(
-                    "A IA gerou um Quiz com formato inválido e foi ignorado.",
-                    e,
-                );
+                console.warn("Quiz com formato inválido:", e);
             }
         }
-        textoIA = textoIA.replace(/\[QUIZ\][\s\S]*?\[\/QUIZ\]/gi, "").trim();
 
+        textoIA = textoIA.replace(/\[QUIZ\][\s\S]*?\[\/QUIZ\]/gi, "").trim();
         textoIA = textoIA
             .replace(/\[CALENDARIO\][\s\S]*?\[\/CALENDARIO\]/g, "")
             .trim();
@@ -1034,11 +1132,16 @@ const enviarMensagem = async () => {
         mensagens.value[indiceIA].content = textoIA;
         await desenharGraficos();
     } catch (error) {
-        indiceAtivo.value = -1;
-        statusMsg.value = "";
-        mensagens.value[indiceIA].content = `❌ Erro: ${error.message}`;
+        if (error.name === "AbortError") {
+            console.log("⏹️ Geração cancelada pelo aluno.");
+        } else {
+            indiceAtivo.value = -1;
+            statusMsg.value = "";
+            mensagens.value[indiceIA].content = `❌ Erro: ${error.message}`;
+        }
     } finally {
         aCarregar.value = false;
+        abortController.value = null;
         indiceAtivo.value = -1;
         statusMsg.value = "";
         await nextTick();
@@ -1407,6 +1510,7 @@ const enviarMensagem = async () => {
     flex-direction: column;
     gap: 20px;
     position: relative;
+    padding-bottom: 80px;
 }
 .welcome-state {
     display: flex;
@@ -2172,6 +2276,89 @@ const enviarMensagem = async () => {
     border-color: rgba(255, 255, 255, 0.2);
     color: inherit;
 }
+
+/* ── BOTÃO PARAR GERAÇÃO ── */
+.stop-btn {
+    position: absolute;
+    bottom: 120px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--c-surface);
+    border: 1px solid var(--c-border);
+    color: var(--c-text);
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    box-shadow: var(--shadow-lg);
+    z-index: 20;
+    transition: all 0.2s ease;
+}
+.stop-btn:hover {
+    border-color: var(--c-accent);
+    color: var(--c-accent);
+}
+.fade-up-enter-active,
+.fade-up-leave-active {
+    transition: all 0.3s ease;
+}
+.fade-up-enter-from,
+.fade-up-leave-to {
+    opacity: 0;
+    transform: translate(-50%, 10px);
+}
+
+/* ── CAMALEÃO RACIOCÍNIO ── */
+:deep(.camaleao-think) {
+    background: var(--c-surface2);
+    border: 1px solid var(--c-border);
+    border-radius: 12px;
+    margin: 16px 0;
+    overflow: hidden;
+    transition: all 0.3s ease;
+}
+:deep(.camaleao-summary) {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    cursor: pointer;
+    user-select: none;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--c-text2);
+    background: var(--c-surface);
+    transition: background 0.2s ease;
+    list-style: none;
+}
+:deep(.camaleao-summary::-webkit-details-marker) {
+    display: none;
+}
+:deep(.camaleao-summary:hover) {
+    background: var(--c-surface2);
+    color: var(--c-accent);
+}
+:deep(.camaleao-pulse) {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--c-accent2);
+    animation: livePulse 1.5s infinite;
+}
+:deep(.camaleao-content) {
+    padding: 16px;
+    font-family: "Fira Code", monospace;
+    font-size: 12px;
+    color: var(--c-text3);
+    line-height: 1.6;
+    border-top: 1px dashed var(--c-border);
+    background: rgba(0, 0, 0, 0.03);
+}
+
 .mermaid-block {
     display: flex;
     justify-content: center;
@@ -2181,8 +2368,28 @@ const enviarMensagem = async () => {
     border-radius: 12px;
     border: 1px solid var(--c-border);
 }
-
-/* 🚀 ESTILOS PARA OS BOTÕES DE CITAÇÃO */
+.mermaid-loading {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 20px;
+    border-radius: 12px;
+    border: 1px dashed var(--c-border2);
+    background: var(--c-surface2);
+    color: var(--c-text3);
+    font-size: 13px;
+    font-weight: 500;
+    margin: 16px 0;
+}
+.mermaid-spinner {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: 2px solid color-mix(in srgb, var(--c-accent) 25%, transparent);
+    border-top-color: var(--c-accent);
+    animation: spin 0.7s linear infinite;
+    flex-shrink: 0;
+}
 .citation-badge {
     display: inline-flex;
     align-items: center;
@@ -2210,8 +2417,6 @@ const enviarMensagem = async () => {
     width: 12px;
     height: 12px;
 }
-
-/* 🚀 ESTILOS PARA A JANELA MODAL DO PDF */
 .pdf-modal-overlay {
     position: fixed;
     top: 0;
@@ -2281,7 +2486,7 @@ const enviarMensagem = async () => {
     flex: 1;
     width: 100%;
     border: none;
-    background: #e5e7eb; /* Cor de fundo neutra caso o PDF demore a carregar */
+    background: #e5e7eb;
 }
 @keyframes modalIn {
     from {

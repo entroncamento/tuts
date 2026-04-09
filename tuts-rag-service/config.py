@@ -1,9 +1,8 @@
 import logging
 import json
+import os
 from enum import Enum
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from slowapi import Limiter
-from slowapi.util import get_remote_address
 
 FAISS_INDEX_FILE = "index.faiss"
 
@@ -14,8 +13,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger("tuts")
 
-
 class Settings(BaseSettings):
+    # 🔥 A TUA CHAVE AGORA VIVE AQUI, PROTEGIDA:
+    groq_api_key: str
+
     iaedu_api_key: str
     iaedu_agent_id: str
     iaedu_channel_id: str
@@ -23,8 +24,9 @@ class Settings(BaseSettings):
 
     internal_token: str
     frontend_origin: str = "http://localhost:5173"
+    laravel_url: str = "http://127.0.0.1:8000"
 
-    uc_json_path: str = "database/data/cadeiras_mtc.json"
+    uc_json_path: str = "database/data/cadeiras_mtc.json" # Podes apagar isto mais tarde se já não usares
 
     faiss_k: int = 8
     bm25_k: int = 6
@@ -46,36 +48,18 @@ class Settings(BaseSettings):
     server_host: str = "0.0.0.0"
     server_port: int = 8001
 
-    # Redis — cache semântico persistente
     redis_host: str = "localhost"
     redis_port: int = 6379
     redis_cache_ttl_dias: int = 7
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-
 try:
     settings = Settings()
 except Exception as exc:
     raise RuntimeError(f"CRITICAL: Configuração inválida — {exc}") from exc
 
-limiter = Limiter(key_func=get_remote_address)
-
-
-def _carregar_ucs(path: str) -> type[Enum]:
-    try:
-        with open(path, encoding="utf-8") as f:
-            dados = json.load(f)
-        membros = {entry["nome_uc"]: entry["nome_uc"] for entry in dados}
-        return Enum("UCEnum", membros)
-    except FileNotFoundError:
-        raise RuntimeError(f"CRITICAL: Ficheiro de UCs não encontrado em '{path}'") from None
-    except (json.JSONDecodeError, KeyError) as exc:
-        raise RuntimeError(f"CRITICAL: Formato inválido no ficheiro de UCs — {exc}") from exc
-
-
-UCEnum = _carregar_ucs(settings.uc_json_path)
-
+# 🔥 LIMPÁMOS O LIMITER E A CARGA DO UCEnum DAQUI!
 
 class PreferenciaEnum(str, Enum):
     default = "default"

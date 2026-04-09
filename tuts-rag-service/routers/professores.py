@@ -7,7 +7,7 @@ import aiofiles
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.security import APIKeyHeader
 
-from config import settings, FAISS_INDEX_FILE, UCEnum, logger
+from config import settings, FAISS_INDEX_FILE, logger
 from core.cache import faiss_cache, bm25_cache, docs_cache, _ingestao_locks
 from core.retrieval import get_vector_store
 from core.utils import limpar_nome_uc
@@ -17,9 +17,9 @@ from services.ingestao import build_index
 router = APIRouter()
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=True)
 
-# 🚀 Constante Global para evitar duplicação de caminhos mágicos
+# 🚀 Constante Global Corrigida: Aponta para a pasta Storage do Laravel!
 _LARAVEL_PDF_DIR = os.path.abspath(
-    os.path.join(os.getcwd(), "..", "tuts-core", "public", "pdfs")
+    os.path.join(os.getcwd(), "..", "tuts-core", "storage", "app", "public", "pdfs")
 )
 
 
@@ -57,41 +57,29 @@ async def apagar_conteudo_uc(uc: str):
     shutil.rmtree(db_path)
     faiss_cache.pop(uc_limpa, None)
     bm25_cache.pop(uc_limpa, None)
-    
-    documentos_desta_uc = docs_cache.get(uc_limpa, [])
-    ficheiros_a_apagar = set()
-    
-    for doc in documentos_desta_uc:
-        conteudo = doc.page_content
-        if conteudo.startswith("[CABEÇALHO FONTE:"):
-            primeira_linha = conteudo.split('\n')[0]
-            partes = primeira_linha.replace("[CABEÇALHO FONTE: ", "").replace("]", "").split(":")
-            if len(partes) >= 2:
-                nome_ficheiro = ":".join(partes[:-1]).strip()
-                ficheiros_a_apagar.add(nome_ficheiro)
-
-    for ficheiro in ficheiros_a_apagar:
-        caminho_completo = os.path.join(_LARAVEL_PDF_DIR, ficheiro)
-        if os.path.exists(caminho_completo):
-            try:
-                os.remove(caminho_completo)
-            except Exception as e:
-                logger.error("Erro ao remover PDF %s do Laravel: %s", ficheiro, e)
-
     docs_cache.pop(uc_limpa, None)
     
+    # 🔥 CORREÇÃO: Apagar os PDFs baseados no prefixo da UC
+    if os.path.exists(_LARAVEL_PDF_DIR):
+        for ficheiro in os.listdir(_LARAVEL_PDF_DIR):
+            if ficheiro.startswith(f"{uc_limpa}_"):
+                caminho_completo = os.path.join(_LARAVEL_PDF_DIR, ficheiro)
+                try:
+                    os.remove(caminho_completo)
+                except Exception as e:
+                    logger.error("Erro ao remover PDF %s: %s", ficheiro, e)
     
     return {"mensagem": f"Conteúdo da UC '{uc_limpa}' removido com sucesso (FAISS e PDFs)."}
 
 
 @router.post("/ingestao", dependencies=[Depends(exigir_professor)], tags=["Professores"])
 async def ingestao(
-    uc: UCEnum = Form(...),
+    uc: str = Form(...),
     chunk_size: int = Form(1200),
     chunk_overlap: int = Form(250),
     files: list[UploadFile] = File(...)
 ):
-    uc_limpa = limpar_nome_uc(uc.value)
+    uc_limpa = limpar_nome_uc(uc)
     if not uc_limpa: 
         raise HTTPException(status_code=400, detail="Nome de UC inválido ou vazio.")
 
@@ -119,11 +107,11 @@ async def ingestao(
     
     async with _ingestao_locks[uc_limpa]:
         for filename, conteudo in conteudos:
-            # Nome limpo (remove espaços e caracteres especiais)
             base_name = os.path.basename(filename).replace(" ", "_")
-            clean_filename = re.sub(r'[^a-zA-Z0-9_.-]', '', base_name)
+            
+            # 🔥 CORREÇÃO: Adicionar prefixo da UC ao nome do ficheiro para evitar colisões
+            clean_filename = f"{uc_limpa}_{re.sub(r'[^a-zA-Z0-9_.-]', '', base_name)}"
 
-            # Guardar PDF na pasta do Laravel para o Frontend poder ler
             caminho_laravel = os.path.join(_LARAVEL_PDF_DIR, clean_filename)
             try:
                 async with aiofiles.open(caminho_laravel, "wb") as f_dest:
@@ -131,7 +119,6 @@ async def ingestao(
             except Exception as e:
                 logger.error("Erro ao guardar PDF %s no Laravel: %s", clean_filename, e)
 
-            # Indexação no FAISS com ficheiro temporário
             tmp_fd, temp_path = tempfile.mkstemp(suffix=".pdf")
             try:
                 os.close(tmp_fd)
@@ -150,7 +137,6 @@ async def ingestao(
                 if os.path.exists(temp_path): 
                     os.remove(temp_path)
 
-    # Invalida a cache apenas no fim da ingestão para não causar reads sujos
     faiss_cache.pop(uc_limpa, None)
     bm25_cache.pop(uc_limpa, None)
     if novos_chunks: 

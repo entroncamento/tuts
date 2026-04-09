@@ -7,14 +7,11 @@ use Illuminate\Http\Request;
 use App\Models\Chat;
 use App\Models\Message;
 use App\Models\Subject;
-use Illuminate\Support\Facades\DB;
 
 class ChatController extends Controller
 {
     private function buildHistorico(int $chat_id): string
     {
-        // 🔥 MAGIA DE LARAVEL: Uma única query que traz os últimos 6 e depois inverte a coleção 
-        // para ficarem por ordem cronológica. (Performance +100%)
         return Message::where('chat_id', $chat_id)
             ->orderBy('created_at', 'desc')
             ->take(6)
@@ -62,7 +59,6 @@ class ChatController extends Controller
 
         $historico = $this->buildHistorico($chat->id);
 
-        // Captura dados do ficheiro
         $imagemPath  = null;
         $imagemNome  = null;
         $imagemMime  = null;
@@ -81,6 +77,13 @@ class ChatController extends Controller
         $threadId      = (string) $chat->id;
         $chatId        = $chat->id;
 
+        // 🔥 1. Guardamos a pergunta ANTES de chamar o Python para termos um ID Real!
+        $userMessage = Message::create([
+            'chat_id' => $chatId,
+            'role'    => 'user',
+            'content' => $texto,
+        ]);
+
         return response()->stream(function () use (
             $urlPython,
             $internalToken,
@@ -92,7 +95,8 @@ class ChatController extends Controller
             $chatId,
             $imagemPath,
             $imagemNome,
-            $imagemMime
+            $imagemMime,
+            $userMessage // Passamos a variável para a função de streaming
         ) {
             while (ob_get_level() > 0) {
                 ob_end_clean();
@@ -102,7 +106,16 @@ class ChatController extends Controller
             $boundary = '----TutsBoundary' . uniqid();
             $body     = '';
 
-            foreach (['texto' => $texto, 'uc' => $uc, 'preferencia' => $preferencia, 'thread_id' => $threadId, 'historico' => $historico] as $field => $value) {
+            foreach (
+                [
+                    'texto'       => $texto,
+                    'uc'          => $uc,
+                    'preferencia' => $preferencia,
+                    'thread_id'   => $threadId,
+                    'historico'   => $historico,
+                    'message_id'  => $userMessage->id, // 🔥 2. Enviamos o ID VERDADEIRO para o Python
+                ] as $field => $value
+            ) {
                 $body .= "--{$boundary}\r\n";
                 $body .= "Content-Disposition: form-data; name=\"{$field}\"\r\n\r\n";
                 $body .= $value . "\r\n";
@@ -118,7 +131,7 @@ class ChatController extends Controller
 
             $body .= "--{$boundary}--\r\n";
 
-            // Preparar a Socket
+            // Ligação directa via socket — sem buffering do HTTP client
             $parsedUrl = parse_url($urlPython);
             $host      = $parsedUrl['host'];
             $port      = $parsedUrl['port'] ?? 80;
@@ -140,15 +153,8 @@ class ChatController extends Controller
                 echo "data: " . json_encode(['chunk' => "\n\n❌ Não foi possível ligar ao servidor de Inteligência Artificial: {$errstr}"]) . "\n\n";
                 echo "data: [DONE]\n\n";
                 flush();
-                return; // 🛑 SAÍDA IMEDIATA: A mensagem do user não é guardada na BD!
+                return;
             }
-
-            // 🔥 SE A SOCKET ABRIU, AGORA SIM GUARDAMOS A PERGUNTA DO ALUNO NA BD!
-            Message::create([
-                'chat_id' => $chatId,
-                'role'    => 'user',
-                'content' => $texto,
-            ]);
 
             fwrite($socket, $httpRequest);
             stream_set_blocking($socket, false);
@@ -159,6 +165,11 @@ class ChatController extends Controller
             $buffer      = '';
 
             while (!feof($socket)) {
+                // 🔥 3. TRAVÃO DE MÃO: Se o Vue.js abortar, cortamos a ligação ao Python!
+                if (connection_aborted()) {
+                    break;
+                }
+
                 $chunk = fread($socket, 512);
                 if ($chunk === false || $chunk === '') {
                     usleep(5000);
@@ -167,6 +178,7 @@ class ChatController extends Controller
 
                 $buffer .= $chunk;
 
+                // Salta os headers HTTP da resposta
                 if (!$headersDone) {
                     $headerEnd = strpos($buffer, "\r\n\r\n");
                     if ($headerEnd === false) continue;
@@ -174,12 +186,12 @@ class ChatController extends Controller
                     $headersDone = true;
                 }
 
-                // 🔥 PARSER SEGURO: Apenas processa "data: " quando encontrado numa linha SSE válida
+                // Processa linha a linha
                 while (($newline = strpos($buffer, "\n")) !== false) {
                     $line   = substr($buffer, 0, $newline + 1);
                     $buffer = substr($buffer, $newline + 1);
 
-                    // Verifica se a linha começa por "data: " ignorando eventuais prefixos de Chunked HTTP
+                    // Parser seguro: procura "data: " ignorando prefixos de chunked encoding
                     if (($dataPos = strpos($line, 'data: ')) !== false) {
                         $jsonStr = substr($line, $dataPos + 6);
 
@@ -190,7 +202,6 @@ class ChatController extends Controller
                             }
                         }
 
-                        // Enviamos a linha SSE limpa para o Vue.js
                         $linhaLimpa = substr($line, $dataPos);
                         echo $linhaLimpa;
                         if (!str_ends_with($linhaLimpa, "\n")) echo "\n";
@@ -238,12 +249,23 @@ class ChatController extends Controller
         ]);
     }
 
+    public function guardarMetadata(\Illuminate\Http\Request $request, $id)
+    {
+        // Encontra a mensagem do aluno no Postgres
+        $message = \App\Models\Message::findOrFail($id);
+
+        // Atualiza a coluna meta_data com o JSON que o Python vai enviar
+        $message->update([
+            'meta_data' => $request->json()->all()
+        ]);
+
+        return response()->json(['status' => 'sucesso', 'message_id' => $id]);
+    }
+
     public function listarChatsPorUC(Request $request)
     {
         $user = $request->user();
 
-        // Se a lógica do sistema exigir a criação de um chat base por UC, descomentamos o firstOrCreate.
-        // Como best practice de API REST (read-only em GET), retornamos apenas os chats que o aluno já criou.
         $chats = Chat::where('user_id', $user->id)
             ->join('subjects', 'chats.subject_id', '=', 'subjects.id')
             ->select('chats.id as chat_id', 'subjects.name as nome_uc', 'chats.title')

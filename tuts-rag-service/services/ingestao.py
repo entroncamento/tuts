@@ -1,4 +1,5 @@
 import os
+import shutil
 import fitz
 from langchain_community.document_loaders import PyMuPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -6,7 +7,6 @@ from langchain_community.vectorstores import FAISS
 
 from config import settings, FAISS_INDEX_FILE, logger
 from core.ml_models import embeddings_model, leitor_ocr
-
 
 def build_index(temp_path: str, filename: str, uc: str, chunk_size: int, chunk_overlap: int) -> tuple[int, list]:
     # 1. Carregar o texto base nativo do PDF
@@ -57,9 +57,7 @@ def build_index(temp_path: str, filename: str, uc: str, chunk_size: int, chunk_o
     )
     chunks = text_splitter.split_documents(documentos)
 
-    # 5. Guardar no FAISS
-    # ⚠️  Race condition potencial se dois uploads chegarem em simultâneo para a mesma UC.
-    # Aplicar lock no router antes de chamar build_index no executor.
+    # 5. Guardar no FAISS de forma ATÓMICA
     db_path = os.path.join(settings.base_faiss_dir, uc)
     os.makedirs(db_path, exist_ok=True)
     index_path = os.path.join(db_path, FAISS_INDEX_FILE)
@@ -70,5 +68,13 @@ def build_index(temp_path: str, filename: str, uc: str, chunk_size: int, chunk_o
     else:
         vs = FAISS.from_documents(chunks, embeddings_model)
 
-    vs.save_local(db_path)
+    # 🔥 CORREÇÃO 2: Gravação Atómica
+    temp_db_path = f"{db_path}_tmp"
+    vs.save_local(temp_db_path)
+    
+    # Se a gravação acima tiver sucesso, esmagamos a pasta antiga com a nova
+    if os.path.exists(db_path):
+        shutil.rmtree(db_path) 
+    os.rename(temp_db_path, db_path)
+
     return len(chunks), chunks

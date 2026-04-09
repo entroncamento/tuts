@@ -9,10 +9,13 @@ class Message extends Model
 {
     use HasFactory;
 
-    // Permitir guardar o ID do chat, quem falou (role) e o texto
-    protected $fillable = ['chat_id', 'role', 'content'];
+    // 🔥 ADICIONA O 'meta_data' AQUI À LISTA VIP!
+    protected $fillable = ['chat_id', 'role', 'content', 'meta_data'];
 
-    // Esta mensagem pertence a que chat?
+    protected $casts = [
+        'meta_data' => 'array',
+    ];
+
     public function chat()
     {
         return $this->belongsTo(Chat::class);

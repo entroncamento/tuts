@@ -16,3 +16,5 @@ use Illuminate\Support\Facades\Route;
 // Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
 //     return $request->user();
 // });
+Route::post('/messages/{id}/metadata', [\App\Http\Controllers\Api\ChatController::class, 'guardarMetadata']);
+Route::get('/dashboard/metrics', [\App\Http\Controllers\Api\DashboardController::class, 'getMetrics']);

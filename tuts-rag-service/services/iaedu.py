@@ -1,134 +1,37 @@
 import json
 import httpx
-import asyncio
-import os
 from typing import AsyncIterator
 from tenacity import retry, stop_after_attempt, wait_exponential
 from fastapi import Request
-from config import settings, logger
+from config import logger
 
 # ---------------------------------------------------------------------------
-# Configuração
+# Configuração da Groq Cloud
 # ---------------------------------------------------------------------------
+from config import GROQ_API_KEY
 
-# Timeout: 10s para conectar, 120s para ler (a IA pode demorar a responder)
-_TIMEOUT = httpx.Timeout(10.0, read=120.0)
+GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 
-# Efeito máquina de escrever — configurável via variáveis de ambiente
-TYPEWRITER_DELAY: float        = float(os.getenv("TYPEWRITER_DELAY_MS",      "30")) / 1000
-TYPEWRITER_FAST_DELAY: float   = float(os.getenv("TYPEWRITER_FAST_DELAY_MS",  "5")) / 1000
-TYPEWRITER_FAST_THRESHOLD: int = int(os.getenv("TYPEWRITER_FAST_THRESHOLD",  "15"))
+# 🧠 MODELOS SEPARADOS!
+MODEL_FAST = "llama-3.1-8b-instant"       # Para JSONs e Background (Rápido e direto)
+MODEL_CHAT = "llama-3.3-70b-versatile"    # Para falar com o Aluno (Inteligente e direto)
 
-
-# ---------------------------------------------------------------------------
-# Excepções
-# ---------------------------------------------------------------------------
+_TIMEOUT = httpx.Timeout(15.0, read=60.0)
 
 class IAEduEmptyResponseError(Exception):
-    """Levantada quando a API da IAEdu devolve uma resposta vazia ou irreconhecível."""
+    pass
 
 class IAEduAPIError(Exception):
-    """Levantada quando a API da IAEdu devolve explicitamente um erro (ex: rate limit)."""
+    pass
 
-
-# ---------------------------------------------------------------------------
-# Formato real da API IAEdu (confirmado por observação dos logs)
-#
-#   type: "start"   -> sinal de inicio, content: "Processing"       -- ignorar
-#   type: "token"   -> chunk incremental, content: "<texto>"        -- usar no stream
-#   type: "message" -> mensagem final acumulada,                    -- usar na funcao classica
-#                      content: {"type": "ai", "content": "<texto completo>"}
-#   type: "done"    -> sinal de fim, content: "<run_id>"            -- ignorar
-#   type: "error"   -> erro explicito, content: "<mensagem>"        -- lancar excepcao
-# ---------------------------------------------------------------------------
-
-# ---------------------------------------------------------------------------
-# Helpers internos
-# ---------------------------------------------------------------------------
-
-def _build_request_params(prompt: str, thread_id: str, user_info: dict | None = None) -> dict:
-    """Constrói os parâmetros comuns do request HTTP."""
+def get_groq_headers():
     return {
-        "url": (
-            f"https://api.iaedu.pt/agent-chat/api/v1/agent"
-            f"/{settings.iaedu_agent_id}/stream"
-        ),
-        "headers": {"x-api-key": settings.iaedu_api_key},
-        "data": {
-            "channel_id": settings.iaedu_channel_id,
-            "thread_id":  thread_id,
-            "user_info":  json.dumps(user_info or {}),
-            "message":    prompt,
-        },
+        "Authorization": f"Bearer {GROQ_API_KEY}",
+        "Content-Type": "application/json"
     }
 
-
-async def _iter_sse_payloads(lines: AsyncIterator[str]) -> AsyncIterator[dict]:
-    """
-    Camada base: consome linhas SSE brutas e emite dicts JSON válidos.
-
-    Trata:
-      - linhas vazias e [DONE]
-      - prefixo "data: "
-      - erros de JSON (ignorados com warning)
-      - type=error  -> lança IAEduAPIError imediatamente
-      - type=start / type=done -> ignorados silenciosamente
-    """
-    async for linha in lines:
-        linha = linha.strip()
-
-        if not linha:
-            continue
-
-        if linha.startswith("data: "):
-            linha = linha[6:].strip()
-
-        if linha == "[DONE]":
-            continue
-
-        try:
-            dados = json.loads(linha)
-        except json.JSONDecodeError:
-            logger.warning("Linha SSE não é JSON válido: '%s'", linha[:80])
-            continue
-
-        tipo = dados.get("type")
-
-        if tipo == "error":
-            raise IAEduAPIError(dados.get("content", "Erro desconhecido da API IAEdu"))
-
-        if tipo in ("start", "done"):
-            continue
-
-        yield dados
-
-
-async def _iter_tokens(lines: AsyncIterator[str]) -> AsyncIterator[str]:
-    """
-    Emite os chunks de texto incrementais (type=token).
-    Usado pela função de streaming — cada evento contém apenas a fatia nova.
-    """
-    async for dados in _iter_sse_payloads(lines):
-        if dados.get("type") == "token":
-            conteudo = dados.get("content")
-            if isinstance(conteudo, str) and conteudo:
-                yield conteudo
-
-
-async def _iter_mensagem_final(lines: AsyncIterator[str]) -> AsyncIterator[str]:
-    """
-    Emite o texto da mensagem final acumulada (type=message).
-    Usado pela função clássica — contém o texto completo da resposta.
-    """
-    async for dados in _iter_sse_payloads(lines):
-        if dados.get("type") == "message":
-            texto = dados.get("content", {}).get("content")
-            if texto:
-                yield texto
-
-
 # ---------------------------------------------------------------------------
-# API pública
+# API Pública (Groq Wrapper)
 # ---------------------------------------------------------------------------
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=4), reraise=True)
@@ -138,40 +41,35 @@ async def chamar_iaedu(
     request: Request,
     user_info: dict | None = None,
 ) -> str:
-    """
-    Chamada clássica (não-streaming) à API da IAEdu.
-
-    Usa o evento type=message que contém o texto completo da resposta.
-    Usada em tarefas de background (ex: expansão de queries, metadados).
-
-    Lança IAEduEmptyResponseError se a resposta for vazia.
-    Tem retry automático até 3 tentativas com backoff exponencial.
-    """
+    """Função rápida usada apenas para processamento de background (Reescrita, Decomposição)"""
     client = request.app.state.http_client
-    params = _build_request_params(prompt, thread_id, user_info)
+    
+    payload = {
+        "model": MODEL_FAST,
+        "messages": [{"role": "user", "content": prompt}],
+        "stream": False,
+        "temperature": 0.3
+    }
 
-    resposta_api = await client.post(
-        params["url"],
-        headers=params["headers"],
-        data=params["data"],
-        timeout=_TIMEOUT,
-    )
-    resposta_api.raise_for_status()
-
-    async def _linhas_sincronas() -> AsyncIterator[str]:
-        for linha in resposta_api.text.splitlines():
-            yield linha
-
-    texto_final = ""
-
-    async for texto in _iter_mensagem_final(_linhas_sincronas()):
-        texto_final = texto  # type=message é sempre o texto acumulado completo
-
-    if not texto_final.strip():
-        logger.error("Resposta vazia da IAEdu (clássica). thread_id=%s", thread_id)
-        raise IAEduEmptyResponseError(f"Resposta vazia para thread_id={thread_id}")
-
-    return texto_final
+    try:
+        resposta_api = await client.post(GROQ_URL, headers=get_groq_headers(), json=payload, timeout=_TIMEOUT)
+        resposta_api.raise_for_status()
+        
+        dados = resposta_api.json()
+        texto_final = dados["choices"][0]["message"]["content"]
+        
+        if not texto_final.strip():
+            raise IAEduEmptyResponseError("Resposta vazia da Groq.")
+            
+        return texto_final
+        
+    except httpx.HTTPStatusError as e:
+        detalhe = e.response.text
+        logger.error(f"Erro 400 da Groq (Background). O que eles dizem: {detalhe}")
+        raise IAEduAPIError(f"Erro da Groq: {e.response.status_code}")
+    except Exception as e:
+        logger.error(f"Erro geral na API da Groq: {e}")
+        raise IAEduAPIError("Falha na comunicação com a IA na Cloud.")
 
 
 async def chamar_iaedu_stream(
@@ -180,46 +78,56 @@ async def chamar_iaedu_stream(
     request: Request,
     user_info: dict | None = None,
 ) -> AsyncIterator[str]:
-    """
-    Chamada em streaming à API da IAEdu.
-
-    Usa os eventos type=token que chegam incrementalmente.
-    Emite tokens individualmente com um atraso configurável para criar
-    o efeito máquina de escrever no Vue.js.
-
-    Lança IAEduEmptyResponseError se nenhum token for recebido.
-    """
+    """Função principal usada para responder ao aluno no chat."""
     client = request.app.state.http_client
-    params = _build_request_params(prompt, thread_id, user_info)
+    
+    # ✅ LIMPÁMOS TUDO AQUI! A personalidade do TUT'S agora vem injetada no 'prompt' através do rag.py
+    payload = {
+        "model": MODEL_CHAT,
+        "messages": [
+            {"role": "user", "content": prompt} # Passamos apenas o prompt gigante do RAG
+        ],
+        "stream": True,
+        "temperature": 0.6 
+    }
 
-    async with client.stream(
-        "POST",
-        params["url"],
-        headers=params["headers"],
-        data=params["data"],
-        timeout=_TIMEOUT,
-    ) as response:
-        response.raise_for_status()
+    try:
+        async with client.stream("POST", GROQ_URL, headers=get_groq_headers(), json=payload, timeout=_TIMEOUT) as response:
+            
+            # 🔥 LER O ERRO ANTES DA LIGAÇÃO FECHAR!
+            if response.status_code != 200:
+                await response.aread()
+                erro_texto = response.text
+                logger.error(f"Groq bloqueou a Stream: {response.status_code} - {erro_texto}")
+                yield f"\n\n❌ **A Groq rejeitou o pedido:** `{erro_texto}`"
+                return
 
-        emitiu_algo = False
+            emitiu_algo = False
 
-        async for token in _iter_tokens(response.aiter_lines()):
-            emitiu_algo = True
+            async for line in response.aiter_lines():
+                if not line or not line.startswith("data: "):
+                    continue
+                
+                json_str = line[6:].strip()
+                if json_str == "[DONE]":
+                    break
+                    
+                try:
+                    dados = json.loads(json_str)
+                    delta = dados["choices"][0].get("delta", {})
+                    chunk = delta.get("content", "")
+                    
+                    if chunk:
+                        emitiu_algo = True
+                        yield chunk
+                        
+                except json.JSONDecodeError:
+                    continue
 
-            # Tokens são já incrementais — emitir directamente, palavra a palavra
-            palavras = token.split(" ")
-
-            # Chunks grandes aceleram o delay para não bloquear o render no cliente
-            delay = (
-                TYPEWRITER_DELAY
-                if len(palavras) <= TYPEWRITER_FAST_THRESHOLD
-                else TYPEWRITER_FAST_DELAY
-            )
-
-            for i, palavra in enumerate(palavras):
-                yield palavra + (" " if i < len(palavras) - 1 else "")
-                await asyncio.sleep(delay)
-
-        if not emitiu_algo:
-            logger.error("Stream vazio da IAEdu. thread_id=%s", thread_id)
-            raise IAEduEmptyResponseError(f"Stream vazio para thread_id={thread_id}")
+            if not emitiu_algo:
+                logger.error("Stream vazio da Groq.")
+                yield "\n\n❌ Erro: A IA não enviou resposta."
+                
+    except Exception as e:
+        logger.error(f"Erro no Stream da Groq: {e}")
+        yield f"\n\n❌ Falha na comunicação com a IA: {str(e)}"
