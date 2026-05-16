@@ -31,6 +31,7 @@
                 </div>
 
                 <div class="sidebar-section-label">As Tuas Cadeiras</div>
+
                 <nav class="sidebar-nav custom-scrollbar">
                     <button
                         v-for="uc in listaUCs"
@@ -61,6 +62,7 @@
                         </span>
                         <span>API Online · Porta 8001</span>
                     </div>
+
                     <div class="user-row">
                         <span class="user-name">{{ utilizador.name }}</span>
                         <button class="logout-btn" @click="sair" title="Sair">
@@ -90,16 +92,32 @@
                         <div class="breadcrumb-chip">A estudar</div>
                         <h2 class="header-uc-name">{{ ucAtual }}</h2>
                     </div>
+
                     <div class="header-right">
                         <div class="mode-selector">
                             <button
-                                v-for="m in modos"
-                                :key="m.value"
-                                @click="preferencia = m.value"
+                                @click="ativarModoAutomatico"
                                 :class="[
                                     'mode-btn',
-                                    preferencia === m.value
+                                    !modoManual ? 'mode-btn--active' : '',
+                                ]"
+                                title="Modo Automático"
+                            >
+                                <span class="mode-icon">⚡</span>
+                                <span class="mode-label">Auto</span>
+                            </button>
+
+                            <button
+                                v-for="m in modos"
+                                :key="m.value"
+                                @click="selecionarModoManual(m.value)"
+                                :class="[
+                                    'mode-btn',
+                                    preferenciaAtiva === m.value
                                         ? 'mode-btn--active'
+                                        : '',
+                                    modoManual === m.value
+                                        ? 'mode-btn--manual'
                                         : '',
                                 ]"
                                 :title="m.label"
@@ -108,6 +126,23 @@
                                 <span class="mode-label">{{ m.label }}</span>
                             </button>
                         </div>
+
+                        <div
+                            class="mode-source-chip"
+                            :class="
+                                modoManual
+                                    ? 'mode-source-chip--manual'
+                                    : 'mode-source-chip--auto'
+                            "
+                            :title="
+                                modoManual
+                                    ? 'Modo fixado por clique manual'
+                                    : 'Modo decidido automaticamente pelo texto'
+                            "
+                        >
+                            {{ origemModoLabel }}
+                        </div>
+
                         <button
                             @click="toggleDarkMode"
                             class="icon-btn"
@@ -142,6 +177,7 @@
                                 />
                             </svg>
                         </button>
+
                         <button
                             @click="limparChat"
                             class="icon-btn"
@@ -178,6 +214,7 @@
                             Estás a estudar <strong>{{ ucAtual }}</strong
                             >. Escolhe um modo acima e começa a aprender.
                         </p>
+
                         <div class="suggestions">
                             <button
                                 v-for="s in sugestoes"
@@ -252,6 +289,7 @@
                                         alt="Anexo"
                                     />
                                 </div>
+
                                 <div
                                     class="prose-content"
                                     @click="lidarComCliqueCitacao"
@@ -290,6 +328,7 @@
                                 <span class="msg-time">{{
                                     formatarHora(msg.hora)
                                 }}</span>
+
                                 <button
                                     v-if="msg.role === 'ai' && msg.content"
                                     @click="copiarMensagem(msg.content, index)"
@@ -362,6 +401,7 @@
                                     corretas</span
                                 >
                             </div>
+
                             <div
                                 v-for="(pergunta, qi) in msg.quiz"
                                 :key="qi"
@@ -371,6 +411,7 @@
                                     <span class="quiz-q-num">{{ qi + 1 }}</span>
                                     {{ pergunta.pergunta }}
                                 </p>
+
                                 <div class="quiz-options">
                                     <button
                                         v-for="(opcao, oi) in pergunta.opcoes"
@@ -388,6 +429,7 @@
                                         <span>{{ opcao }}</span>
                                     </button>
                                 </div>
+
                                 <div
                                     v-if="msg.respostas[qi] !== -1"
                                     :class="[
@@ -415,6 +457,7 @@
                                             >.</span
                                         >
                                     </div>
+
                                     <div
                                         v-if="pergunta.explicacao"
                                         class="quiz-explanation mb-2"
@@ -443,6 +486,7 @@
                         class="msg-row msg-row--ai"
                     >
                         <div class="msg-avatar msg-avatar--ai">T</div>
+
                         <div class="typing-bubble">
                             <template v-if="statusMsg">
                                 <span class="status-spinner"></span>
@@ -515,6 +559,7 @@
                             ×
                         </button>
                     </div>
+
                     <div class="input-area">
                         <label class="attach-btn" title="Anexar Imagem">
                             <svg
@@ -537,7 +582,7 @@
                                 @change="lidarComImagem"
                             />
                         </label>
-                        <!-- ✅ ALTERAÇÃO: placeholder dinâmico consoante o modo -->
+
                         <textarea
                             v-model="mensagemAtual"
                             @keydown.enter.exact.prevent="enviarMensagem"
@@ -547,12 +592,14 @@
                             :placeholder="placeholderTexto"
                             class="chat-textarea"
                         ></textarea>
+
                         <div class="input-right">
                             <span
                                 class="char-hint"
                                 v-if="mensagemAtual.length > 0"
                                 >{{ mensagemAtual.length }}</span
                             >
+
                             <button
                                 @click="enviarMensagem"
                                 :disabled="
@@ -581,9 +628,11 @@
                             </button>
                         </div>
                     </div>
+
                     <p class="input-hint">
-                        Modo: <strong>{{ modoAtual?.label }}</strong> · Enter
-                        envia · Shift+Enter nova linha
+                        Modo: <strong>{{ modoAtual?.label }}</strong> · Origem:
+                        <strong>{{ origemModoLabel }}</strong> · Enter envia ·
+                        Shift+Enter nova linha
                     </p>
                 </footer>
             </div>
@@ -602,6 +651,7 @@
                                     pdfFicheiroAtual
                                 }}</span>
                             </div>
+
                             <button
                                 @click="fecharPdf"
                                 class="pdf-modal-close"
@@ -622,6 +672,7 @@
                                 </svg>
                             </button>
                         </div>
+
                         <iframe
                             :src="pdfUrlAtual"
                             class="pdf-modal-iframe"
@@ -632,9 +683,9 @@
         </template>
     </div>
 </template>
-
 <script setup>
 import { ref, nextTick, onMounted, computed } from "vue";
+import { usePage } from "@inertiajs/vue3";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
 import mermaid from "mermaid";
@@ -643,13 +694,17 @@ import Login from "./Login.vue";
 
 mermaid.initialize({ startOnLoad: false, theme: "base" });
 
+const page = usePage();
+
 const modos = [
-    { value: "default", label: "Tutor" },
-    { value: "visual", label: "Visual" },
-    { value: "plano", label: "Plano" },
-    { value: "quiz", label: "Quiz" },
-    { value: "feynman", label: "Feynman" },
+    { value: "default", label: "Tutor", icon: "💬" },
+    { value: "visual", label: "Visual", icon: "🧩" },
+    { value: "plano", label: "Plano", icon: "🗓️" },
+    { value: "quiz", label: "Quiz", icon: "🎯" },
+    { value: "feynman", label: "Feynman", icon: "🧠" },
 ];
+
+const MODOS_VALIDOS = modos.map((m) => m.value);
 
 const listaUCs = ref(cadeirasDados.map((c) => c.nome_uc));
 const mensagens = ref([]);
@@ -657,7 +712,6 @@ const mensagemAtual = ref("");
 const aCarregar = ref(false);
 const chatContainer = ref(null);
 const textareaRef = ref(null);
-const preferencia = ref("default");
 const imagemFicheiro = ref(null);
 const imagemPreview = ref(null);
 const threadId = ref(crypto.randomUUID());
@@ -667,15 +721,154 @@ const copiado = ref(null);
 const mostrarScrollBtn = ref(false);
 const indiceAtivo = ref(-1);
 const statusMsg = ref("");
-const utilizador = ref(null);
-
-// 🔥 Variável do Travão de Mão
+const utilizador = ref(page.props.auth?.user ?? null);
 const abortController = ref(null);
 
-// Variáveis do Leitor de PDF
 const pdfModalAberto = ref(false);
 const pdfUrlAtual = ref("");
 const pdfFicheiroAtual = ref("");
+
+// AUTO vs MANUAL
+const modoManual = ref(null); // null = automático
+const modoAuto = ref("default");
+
+const preferenciaAtiva = computed(
+    () => modoManual.value ?? modoAuto.value ?? "default",
+);
+
+const modoAtual = computed(() =>
+    modos.find((m) => m.value === preferenciaAtiva.value),
+);
+
+const origemModoLabel = computed(() =>
+    modoManual.value ? "Manual" : "Automático",
+);
+
+const normalizarTexto = (texto = "") =>
+    texto
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^\w\s]/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+
+const PADROES_MODO = {
+    quiz: [
+        /\bquiz\b/g,
+        /\bquestionario\b/g,
+        /\bescolha multipla\b/g,
+        /\bmultiple choice\b/g,
+        /\bverdadeiro ou falso\b/g,
+        /\btesta me\b/g,
+        /\btesta-me\b/g,
+        /\bfaz me perguntas\b/g,
+        /\bfaz-me perguntas\b/g,
+        /\bperguntas rapidas\b/g,
+    ],
+    visual: [
+        /\bgrafico\b/g,
+        /\bgráfico\b/g,
+        /\bdiagrama\b/g,
+        /\besquema\b/g,
+        /\besquema visual\b/g,
+        /\bmapa mental\b/g,
+        /\bmind map\b/g,
+        /\bfluxograma\b/g,
+        /\bvisualiza\b/g,
+        /\bvisualmente\b/g,
+        /\bquadro comparativo\b/g,
+        /\btabela comparativa\b/g,
+    ],
+    plano: [
+        /\bplano de estudo\b/g,
+        /\bcronograma\b/g,
+        /\broteiro de estudo\b/g,
+        /\bcalendario\b/g,
+        /\bcalendário\b/g,
+        /\bagenda de estudo\b/g,
+        /\bestudo semanal\b/g,
+        /\bestudo por dias\b/g,
+        /\borganiza me o estudo\b/g,
+        /\borganiza-me o estudo\b/g,
+        /\bplaneia o estudo\b/g,
+    ],
+    feynman: [
+        /\bfeynman\b/g,
+        /\bmetodo feynman\b/g,
+        /\bmétodo feynman\b/g,
+        /\bexplica de forma simples\b/g,
+        /\bexplica como se eu tivesse 5 anos\b/g,
+        /\bavalia a minha explicacao\b/g,
+        /\bavalia a minha explicação\b/g,
+        /\bcorrige a minha explicacao\b/g,
+        /\bcorrige a minha explicação\b/g,
+        /\bver se percebi\b/g,
+    ],
+};
+
+const detetarPreferenciaLocal = (texto) => {
+    const t = normalizarTexto(texto);
+
+    if (!t) return "default";
+
+    if (
+        /(modo normal|modo tutor|resposta normal|explica normalmente|sem quiz|sem esquema|sem grafico|sem diagrama|volta ao normal|modo automatico normal)/.test(
+            t,
+        )
+    ) {
+        return "default";
+    }
+
+    const scores = {
+        quiz: 0,
+        visual: 0,
+        plano: 0,
+        feynman: 0,
+    };
+
+    for (const [modo, regexes] of Object.entries(PADROES_MODO)) {
+        for (const regex of regexes) {
+            const matches = t.match(regex);
+            if (matches) {
+                scores[modo] += matches.length;
+            }
+        }
+    }
+
+    let melhorModo = "default";
+    let melhorScore = 0;
+
+    for (const modo of ["visual", "quiz", "plano", "feynman"]) {
+        if (scores[modo] > melhorScore) {
+            melhorModo = modo;
+            melhorScore = scores[modo];
+        }
+    }
+
+    return melhorScore > 0 ? melhorModo : "default";
+};
+
+const aplicarPreferenciaAutomatica = (modo) => {
+    if (!MODOS_VALIDOS.includes(modo)) return;
+    modoAuto.value = modo;
+};
+
+const selecionarModoManual = (modo) => {
+    if (!MODOS_VALIDOS.includes(modo)) return;
+
+    if (modoManual.value === modo) {
+        ativarModoAutomatico();
+        return;
+    }
+
+    modoManual.value = modo;
+};
+
+const ativarModoAutomatico = () => {
+    modoManual.value = null;
+    modoAuto.value = detetarPreferenciaLocal(mensagemAtual.value);
+};
 
 const fecharPdf = () => {
     pdfModalAberto.value = false;
@@ -685,32 +878,40 @@ const fecharPdf = () => {
 
 const lidarComCliqueCitacao = (event) => {
     const btn = event.target.closest(".citation-badge");
-    if (btn) {
-        let ficheiro = btn.getAttribute("data-ficheiro").trim();
-        const pagina = btn.getAttribute("data-pagina").trim();
+    if (!btn) return;
 
-        ficheiro = ficheiro.replace(/^Ficheiro:\s*/i, "");
+    let ficheiro = btn.getAttribute("data-ficheiro")?.trim() || "";
+    const pagina = btn.getAttribute("data-pagina")?.trim() || "1";
 
-        pdfFicheiroAtual.value = ficheiro;
-        pdfUrlAtual.value = `http://localhost:8000/pdfs/${encodeURIComponent(ficheiro)}#page=${pagina}`;
-        pdfModalAberto.value = true;
-    }
+    ficheiro = ficheiro.replace(/^Ficheiro:\s*/i, "");
+
+    pdfFicheiroAtual.value = ficheiro;
+    pdfUrlAtual.value = `http://127.0.0.1:8001/pdfs/${encodeURIComponent(ficheiro)}#page=${pagina}`;
+    pdfModalAberto.value = true;
 };
 
-const modoAtual = computed(() =>
-    modos.find((m) => m.value === preferencia.value),
-);
-
-// ✅ ALTERAÇÃO 1: placeholder dinâmico consoante o modo ativo
 const placeholderTexto = computed(() => {
-    if (preferencia.value === "feynman")
+    if (preferenciaAtiva.value === "feynman") {
         return "🧠 Explica o conceito com as tuas palavras... o Tut's vai avaliar-te!";
+    }
+
+    if (preferenciaAtiva.value === "quiz") {
+        return "🎯 Pede um quiz, verdadeiro/falso ou perguntas rápidas...";
+    }
+
+    if (preferenciaAtiva.value === "visual") {
+        return "🧩 Pede um esquema, gráfico, diagrama ou mapa mental...";
+    }
+
+    if (preferenciaAtiva.value === "plano") {
+        return "🗓️ Pede um plano de estudo, cronograma ou organização por dias...";
+    }
+
     return "Faz uma pergunta... (Enter envia, Shift+Enter nova linha)";
 });
 
-// ✅ ALTERAÇÃO 2: sugestões contextuais consoante o modo ativo
 const sugestoes = computed(() => {
-    if (preferencia.value === "feynman") {
+    if (preferenciaAtiva.value === "feynman") {
         return [
             `Explica-me o que é ${ucAtual.value} com as tuas palavras`,
             `Tenta descrever o conceito mais importante desta UC`,
@@ -718,6 +919,34 @@ const sugestoes = computed(() => {
             `Começa pelo início — o que sabes sobre este tema?`,
         ];
     }
+
+    if (preferenciaAtiva.value === "quiz") {
+        return [
+            `Faz-me um quiz sobre ${ucAtual.value}`,
+            `Cria 5 perguntas de escolha múltipla`,
+            `Testa-me com verdadeiro ou falso`,
+            `Faz perguntas e corrige as minhas respostas`,
+        ];
+    }
+
+    if (preferenciaAtiva.value === "visual") {
+        return [
+            `Faz-me um esquema visual sobre ${ucAtual.value}`,
+            `Cria um diagrama dos conceitos principais`,
+            `Organiza isto num mapa mental`,
+            `Faz um quadro comparativo dos tópicos`,
+        ];
+    }
+
+    if (preferenciaAtiva.value === "plano") {
+        return [
+            `Cria um plano de estudo para ${ucAtual.value}`,
+            `Organiza-me o estudo para esta semana`,
+            `Faz um cronograma até ao teste`,
+            `Divide a matéria por dias`,
+        ];
+    }
+
     return [
         `Explica os conceitos base de ${ucAtual.value}`,
         `Cria um resumo dos tópicos mais importantes`,
@@ -739,44 +968,50 @@ async function sair() {
     await window.axios.post("/api/logout");
     utilizador.value = null;
     mensagens.value = [];
+    statusMsg.value = "";
+    threadId.value = crypto.randomUUID();
+    ativarModoAutomatico();
 }
 
-onMounted(async () => {
-    try {
-        const { data } = await window.axios.get("/api/me");
-        utilizador.value = data.user;
-    } catch (_) {
-        /* sessão inexistente */
-    }
-
+onMounted(() => {
     const prefereDark =
         localStorage.theme === "dark" ||
         (!("theme" in localStorage) &&
             window.matchMedia("(prefers-color-scheme: dark)").matches);
+
     isDark.value = prefereDark;
     document.documentElement.classList.toggle("dark", prefereDark);
 });
 
 const scrollToBottom = () => {
-    if (chatContainer.value)
+    if (chatContainer.value) {
         chatContainer.value.scrollTop = chatContainer.value.scrollHeight;
+    }
 };
+
 const onScroll = () => {
     const el = chatContainer.value;
     if (!el) return;
+
     mostrarScrollBtn.value =
         el.scrollHeight - el.scrollTop - el.clientHeight > 120;
 };
+
 const formatarHora = (d) =>
-    d?.toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" }) ??
-    "";
+    d?.toLocaleTimeString("pt-PT", {
+        hour: "2-digit",
+        minute: "2-digit",
+    }) ?? "";
+
 const selecionarUC = (novaUC) => {
     if (ucAtual.value === novaUC) return;
+
     ucAtual.value = novaUC;
     mensagens.value = [];
     statusMsg.value = "";
     threadId.value = crypto.randomUUID();
 };
+
 const limparChat = () => {
     mensagens.value = [];
     statusMsg.value = "";
@@ -795,12 +1030,14 @@ const toggleDarkMode = () => {
     localStorage.theme = isDark.value ? "dark" : "light";
     mermaid.initialize({ theme: isDark.value ? "dark" : "base" });
 };
+
 const lidarComImagem = (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
     const reader = new FileReader();
     reader.readAsDataURL(file);
+
     reader.onload = (event) => {
         const img = new Image();
         img.src = event.target.result;
@@ -809,6 +1046,7 @@ const lidarComImagem = (e) => {
             const canvas = document.createElement("canvas");
             const MAX_WIDTH = 1200;
             const MAX_HEIGHT = 1200;
+
             let width = img.width;
             let height = img.height;
 
@@ -817,15 +1055,14 @@ const lidarComImagem = (e) => {
                     height *= MAX_WIDTH / width;
                     width = MAX_WIDTH;
                 }
-            } else {
-                if (height > MAX_HEIGHT) {
-                    width *= MAX_HEIGHT / height;
-                    height = MAX_HEIGHT;
-                }
+            } else if (height > MAX_HEIGHT) {
+                width *= MAX_HEIGHT / height;
+                height = MAX_HEIGHT;
             }
 
             canvas.width = width;
             canvas.height = height;
+
             const ctx = canvas.getContext("2d");
             ctx.drawImage(img, 0, 0, width, height);
 
@@ -836,11 +1073,16 @@ const lidarComImagem = (e) => {
                         imagemPreview.value = URL.createObjectURL(file);
                         return;
                     }
+
                     const compressedFile = new File(
                         [blob],
                         file.name.replace(/\.[^/.]+$/, "") + ".jpg",
-                        { type: "image/jpeg", lastModified: Date.now() },
+                        {
+                            type: "image/jpeg",
+                            lastModified: Date.now(),
+                        },
                     );
+
                     imagemFicheiro.value = compressedFile;
                     imagemPreview.value = URL.createObjectURL(compressedFile);
                 },
@@ -850,32 +1092,38 @@ const lidarComImagem = (e) => {
         };
     };
 };
+
 const removerImagem = () => {
     imagemFicheiro.value = null;
     imagemPreview.value = null;
 };
+
 const autoResize = () => {
     const el = textareaRef.value;
     if (!el) return;
+
     el.style.height = "auto";
     el.style.height = Math.min(el.scrollHeight, 160) + "px";
 };
+
 const copiarMensagem = async (content, index) => {
     await navigator.clipboard.writeText(content);
     copiado.value = index;
     setTimeout(() => (copiado.value = null), 2000);
 };
 
-// ✅ QUIZ: usa -1 como sentinela em vez de undefined
 const responderQuiz = (msg, pi, oi) => {
     msg.respostas[pi] = oi;
 };
+
 const quizFinalizado = (msg) =>
     msg.quiz &&
     msg.respostas &&
     msg.respostas.filter((r) => r !== -1).length === msg.quiz.length;
+
 const pontuacaoQuiz = (msg) =>
     msg.respostas.filter((r, i) => r === msg.quiz[i].correta).length;
+
 const getQuizButtonClass = (msg, qi, oi) => {
     if (msg.respostas[qi] === -1) return "quiz-option--default";
     if (oi === msg.quiz[qi].correta) return "quiz-option--correct";
@@ -883,32 +1131,30 @@ const getQuizButtonClass = (msg, qi, oi) => {
     return "quiz-option--inactive";
 };
 
-// 🔥 Função de Travão de Mão
 const pararGeracao = () => {
-    if (abortController.value) {
-        abortController.value.abort();
-        abortController.value = null;
-        aCarregar.value = false;
-        indiceAtivo.value = -1;
-        statusMsg.value = "";
+    if (!abortController.value) return;
 
-        const lastMsg = mensagens.value[mensagens.value.length - 1];
-        if (lastMsg && lastMsg.role === "ai") {
-            lastMsg.content += "\n\n*[Geração interrompida]*";
-        }
+    abortController.value.abort();
+    abortController.value = null;
+    aCarregar.value = false;
+    indiceAtivo.value = -1;
+    statusMsg.value = "";
+
+    const lastMsg = mensagens.value[mensagens.value.length - 1];
+    if (lastMsg && lastMsg.role === "ai") {
+        lastMsg.content += "\n\n*[Geração interrompida]*";
     }
 };
 
-// ---------------------------------------------------------------------------
-// renderMarkdown — com suporte a streaming de Mermaid E CAMALEÃO
-// ---------------------------------------------------------------------------
 const renderMarkdown = (texto, isStreaming = false) => {
     const str = texto || "";
     if (!str.trim()) return "";
+
     try {
         if (isStreaming) {
             const abertos = (str.match(/```mermaid/g) || []).length;
             const fechados = (str.match(/```mermaid[\s\S]*?```/g) || []).length;
+
             if (abertos > fechados) {
                 const semMermaid = str.replace(/```mermaid[\s\S]*$/, "");
                 return DOMPurify.sanitize(
@@ -919,12 +1165,14 @@ const renderMarkdown = (texto, isStreaming = false) => {
             }
         }
 
-        // 🦎 MAGIA DO CAMALEÃO: Raciocínio (DeepSeek R1)
-        let processado = str.replace(
+        let processado = str;
+
+        processado = processado.replace(
             /<think>([\s\S]*?)(?:<\/think>|$)/gi,
-            (match, pensamento) => {
+            (_, pensamento) => {
                 const safePensamento = pensamento.trim();
                 if (!safePensamento) return "";
+
                 return `<details class="camaleao-think">
                     <summary class="camaleao-summary">
                         <span class="camaleao-icon">🦎</span>
@@ -936,43 +1184,65 @@ const renderMarkdown = (texto, isStreaming = false) => {
             },
         );
 
+        const mermaidBlocks = [];
         processado = processado.replace(
-            /```mermaid\n([\s\S]*?)```/g,
+            /```mermaid\s*([\s\S]*?)```/g,
             (_, codigo) => {
-                const safe = codigo
-                    .replace(/\[[^\]]+:\d+\]/g, "")
-                    .replace(/\[|\]/g, "");
-                return `<div class="mermaid mermaid-block">${safe}</div>`;
+                const key = `__MERMAID_BLOCK_${mermaidBlocks.length}__`;
+                mermaidBlocks.push(
+                    `<div class="mermaid mermaid-block">${codigo.trim()}</div>`,
+                );
+                return key;
             },
         );
 
         processado = processado.replace(
             /\[([^\]]+?)\s*:\s*(\d+)\s*\]/g,
-            (match, ficheiro, pagina) => {
+            (_, ficheiro, pagina) => {
                 const f = ficheiro.trim();
                 const p = pagina.trim();
+
                 return `<button class="citation-badge" data-ficheiro="${f}" data-pagina="${p}" title="Abrir Documento Original na página ${p}">
-                    <svg class="citation-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path></svg>
+                    <svg class="citation-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path>
+                    </svg>
                     ${f} (Pág. ${p})
                 </button>`;
             },
         );
 
+        mermaidBlocks.forEach((block, i) => {
+            processado = processado.replace(`__MERMAID_BLOCK_${i}__`, block);
+        });
+
         return DOMPurify.sanitize(marked.parse(processado), {
             ADD_ATTR: ["class", "data-ficheiro", "data-pagina", "title"],
-            ADD_TAGS: ["svg", "path", "button", "details", "summary"],
+            ADD_TAGS: [
+                "svg",
+                "path",
+                "button",
+                "details",
+                "summary",
+                "div",
+                "span",
+            ],
         });
     } catch (e) {
+        console.error("Erro no renderMarkdown:", e);
         return str;
     }
 };
 
 const desenharGraficos = async () => {
     await nextTick();
+
     try {
-        await mermaid.run({ querySelector: ".mermaid", suppressErrors: true });
+        await mermaid.run({
+            querySelector: ".mermaid",
+            suppressErrors: false,
+        });
     } catch (e) {
-        /* suppress */
+        console.error("Erro a renderizar Mermaid:", e);
     }
 };
 
@@ -983,14 +1253,26 @@ const enviarMensagem = async () => {
     const textoUser = mensagemAtual.value;
     const imgUser = imagemPreview.value;
 
+    const preferenciaDetetada = detetarPreferenciaLocal(textoUser);
+
+    if (!modoManual.value) {
+        aplicarPreferenciaAutomatica(preferenciaDetetada);
+    }
+
+    const preferenciaPedido = modoManual.value ?? preferenciaDetetada;
+
     mensagens.value.push({
         role: "user",
         content: textoUser,
         imagem: imgUser,
         hora: new Date(),
     });
+
     mensagemAtual.value = "";
-    if (textareaRef.value) textareaRef.value.style.height = "auto";
+
+    if (textareaRef.value) {
+        textareaRef.value.style.height = "auto";
+    }
 
     mensagens.value.push({
         role: "ai",
@@ -1001,6 +1283,7 @@ const enviarMensagem = async () => {
         respostas: [],
         hora: new Date(),
     });
+
     const indiceIA = mensagens.value.length - 1;
     indiceAtivo.value = -1;
     statusMsg.value = "";
@@ -1012,11 +1295,13 @@ const enviarMensagem = async () => {
     const formData = new FormData();
     formData.append("texto", textoUser || "Analisa a imagem em anexo.");
     formData.append("uc", ucAtual.value);
-    formData.append("preferencia", preferencia.value);
+    formData.append("preferencia", preferenciaPedido);
 
-    if (imagemFicheiro.value) formData.append("imagem", imagemFicheiro.value);
+    if (imagemFicheiro.value) {
+        formData.append("imagem", imagemFicheiro.value);
+    }
+
     removerImagem();
-
     abortController.value = new AbortController();
 
     try {
@@ -1037,7 +1322,9 @@ const enviarMensagem = async () => {
             return;
         }
 
-        if (!resposta.ok) throw new Error(`HTTP ${resposta.status}`);
+        if (!resposta.ok) {
+            throw new Error(`HTTP ${resposta.status}`);
+        }
 
         const reader = resposta.body.getReader();
         const decoder = new TextDecoder("utf-8");
@@ -1046,6 +1333,7 @@ const enviarMensagem = async () => {
         while (true) {
             const { done, value } = await reader.read();
             if (done) break;
+
             buffer += decoder.decode(value, { stream: true });
             const partes = buffer.split("\n");
             buffer = partes.pop();
@@ -1053,17 +1341,27 @@ const enviarMensagem = async () => {
             for (let parte of partes) {
                 parte = parte.trim();
                 if (!parte.startsWith("data: ")) continue;
+
                 const jsonStr = parte.substring(6).trim();
                 if (jsonStr === "[DONE]") continue;
+
                 try {
                     const data = JSON.parse(jsonStr);
-                    if (data.sem_contexto !== undefined)
+
+                    if (data.preferencia_auto && !modoManual.value) {
+                        aplicarPreferenciaAutomatica(data.preferencia_auto);
+                    }
+
+                    if (data.sem_contexto !== undefined) {
                         mensagens.value[indiceIA].semContexto =
                             data.sem_contexto;
+                    }
+
                     if (data.status_msg) {
                         statusMsg.value = data.status_msg;
                         scrollToBottom();
                     }
+
                     if (data.chunk) {
                         statusMsg.value = "";
                         indiceAtivo.value = indiceIA;
@@ -1071,7 +1369,7 @@ const enviarMensagem = async () => {
                         scrollToBottom();
                     }
                 } catch (e) {
-                    /* JSON incompleto */
+                    // JSON incompleto ou chunk parcial
                 }
             }
         }
@@ -1084,29 +1382,29 @@ const enviarMensagem = async () => {
         const sugestoesMatch = textoIA.match(
             /\[SUGEST[OÕ]ES\]([\s\S]*?)\[\/SUGEST[OÕ]ES\]/i,
         );
+
         if (sugestoesMatch) {
             mensagens.value[indiceIA].sugestoes = sugestoesMatch[1]
                 .split("|")
                 .map((s) => s.trim())
                 .filter(Boolean);
         }
+
         textoIA = textoIA
             .replace(/\[SUGEST[OÕ]ES\][\s\S]*?\[\/SUGEST[OÕ]ES\]/gi, "")
             .trim();
 
-        // ✅ QUIZ PARSER ROBUSTO
         const quizMatch = textoIA.match(/\[QUIZ\]([\s\S]*?)\[\/QUIZ\]/i);
+
         if (quizMatch) {
             try {
                 let jsonCru = quizMatch[1].trim();
 
-                // Remove blocos ```json ... ``` ou ``` ... ``` (com ou sem newlines)
                 jsonCru = jsonCru
                     .replace(/^```(?:json)?\s*/im, "")
                     .replace(/\s*```\s*$/im, "")
                     .trim();
 
-                // Extrai o array JSON mesmo que haja texto extra à volta
                 const arrayMatch = jsonCru.match(/(\[[\s\S]*\])/);
                 if (arrayMatch) jsonCru = arrayMatch[1];
 
@@ -1114,7 +1412,6 @@ const enviarMensagem = async () => {
 
                 if (Array.isArray(qData) && qData.length > 0) {
                     mensagens.value[indiceIA].quiz = qData;
-                    // ✅ Array reativo com -1 como sentinela (não esparso)
                     mensagens.value[indiceIA].respostas = Array(
                         qData.length,
                     ).fill(-1);
@@ -1149,7 +1446,6 @@ const enviarMensagem = async () => {
     }
 };
 </script>
-
 <style>
 @import url("https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=Instrument+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap");
 :root {
@@ -2276,8 +2572,6 @@ const enviarMensagem = async () => {
     border-color: rgba(255, 255, 255, 0.2);
     color: inherit;
 }
-
-/* ── BOTÃO PARAR GERAÇÃO ── */
 .stop-btn {
     position: absolute;
     bottom: 120px;
@@ -2311,8 +2605,6 @@ const enviarMensagem = async () => {
     opacity: 0;
     transform: translate(-50%, 10px);
 }
-
-/* ── CAMALEÃO RACIOCÍNIO ── */
 :deep(.camaleao-think) {
     background: var(--c-surface2);
     border: 1px solid var(--c-border);
@@ -2358,7 +2650,6 @@ const enviarMensagem = async () => {
     border-top: 1px dashed var(--c-border);
     background: rgba(0, 0, 0, 0.03);
 }
-
 .mermaid-block {
     display: flex;
     justify-content: center;
@@ -2505,5 +2796,43 @@ const enviarMensagem = async () => {
 .fade-enter-from,
 .fade-leave-to {
     opacity: 0;
+}
+.mode-btn--manual {
+    border: 1px solid color-mix(in srgb, var(--c-accent) 35%, transparent);
+}
+
+.mode-source-chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 88px;
+    height: 34px;
+    padding: 0 12px;
+    border-radius: 999px;
+    border: 1px solid var(--c-border);
+    background: var(--c-surface);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.mode-source-chip--auto {
+    color: var(--c-accent);
+    background: var(--c-accent-l);
+    border-color: color-mix(in srgb, var(--c-accent) 25%, transparent);
+}
+
+.mode-source-chip--manual {
+    color: #d97706;
+    background: rgba(217, 119, 6, 0.1);
+    border-color: rgba(217, 119, 6, 0.28);
+}
+
+.dark .mode-source-chip--manual {
+    color: #fbbf24;
+    background: rgba(251, 191, 36, 0.12);
+    border-color: rgba(251, 191, 36, 0.22);
 }
 </style>

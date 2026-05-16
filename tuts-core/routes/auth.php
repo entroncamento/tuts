@@ -15,17 +15,24 @@ Route::middleware('guest')->group(function () {
     Route::get('register', [RegisteredUserController::class, 'create'])
         ->name('register');
 
-    Route::post('register', [RegisteredUserController::class, 'store']);
+    // PROTEÇÃO: Impede criação massiva de contas por bots (Máx: 5 registos por minuto por IP)
+    Route::post('register', [RegisteredUserController::class, 'store'])
+        ->middleware('throttle:5,1');
 
     Route::get('login', [AuthenticatedSessionController::class, 'create'])
         ->name('login');
 
-    Route::post('login', [AuthenticatedSessionController::class, 'store']);
+    // PROTEÇÃO: Defesa em profundidade contra Brute-Force e Credential Stuffing
+    // (O Laravel Breeze já tem throttling no LoginRequest, mas colocar aqui bloqueia logo no Router)
+    Route::post('login', [AuthenticatedSessionController::class, 'store'])
+        ->middleware('throttle:5,1');
 
     Route::get('forgot-password', [PasswordResetLinkController::class, 'create'])
         ->name('password.request');
 
+    // PROTEÇÃO: Impede que usem o teu servidor para fazer SPAM de emails a terceiros
     Route::post('forgot-password', [PasswordResetLinkController::class, 'store'])
+        ->middleware('throttle:3,1')
         ->name('password.email');
 
     Route::get('reset-password/{token}', [NewPasswordController::class, 'create'])

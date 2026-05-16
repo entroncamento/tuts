@@ -1,111 +1,155 @@
 <script setup>
-import GuestLayout from '@/Layouts/GuestLayout.vue';
-import InputError from '@/Components/InputError.vue';
-import InputLabel from '@/Components/InputLabel.vue';
-import PrimaryButton from '@/Components/PrimaryButton.vue';
-import TextInput from '@/Components/TextInput.vue';
-import { Head, Link, useForm } from '@inertiajs/vue3';
+import { ref } from "vue";
+import GuestLayout from "@/Layouts/GuestLayout.vue";
+import InputError from "@/Components/InputError.vue";
+import InputLabel from "@/Components/InputLabel.vue";
+import PrimaryButton from "@/Components/PrimaryButton.vue";
+import TextInput from "@/Components/TextInput.vue";
+import { Head, Link, useForm } from "@inertiajs/vue3";
 
 const form = useForm({
-    name: '',
-    email: '',
-    password: '',
-    password_confirmation: '',
+    name: "",
+    email: "",
+    role: "aluno", // Começa por defeito como aluno
+    professor_key: "",
+    password: "",
+    password_confirmation: "",
 });
 
 const submit = () => {
-    form.post(route('register'), {
-        onFinish: () => form.reset('password', 'password_confirmation'),
+    form.post(route("register"), {
+        onFinish: () => form.reset("password", "password_confirmation"),
     });
 };
 </script>
 
 <template>
     <GuestLayout>
-        <Head title="Register" />
+        <Head title="Registo - TUT'S" />
 
         <form @submit.prevent="submit">
-            <div>
-                <InputLabel for="name" value="Name" />
+            <div class="mb-4">
+                <InputLabel value="Tipo de Conta" />
+                <div class="mt-2 flex gap-6">
+                    <label class="flex items-center cursor-pointer">
+                        <input
+                            type="radio"
+                            v-model="form.role"
+                            value="aluno"
+                            class="rounded-full border-gray-300 text-green-600 shadow-sm focus:ring-green-500"
+                        />
+                        <span class="ml-2 text-sm text-gray-700"
+                            >Aluno (@ua.pt)</span
+                        >
+                    </label>
+                    <label class="flex items-center cursor-pointer">
+                        <input
+                            type="radio"
+                            v-model="form.role"
+                            value="professor"
+                            class="rounded-full border-gray-300 text-green-600 shadow-sm focus:ring-green-500"
+                        />
+                        <span class="ml-2 text-sm text-gray-700"
+                            >Professor / Regente</span
+                        >
+                    </label>
+                </div>
+            </div>
 
+            <div>
+                <InputLabel for="name" value="Nome Completo" />
                 <TextInput
                     id="name"
                     type="text"
-                    class="mt-1 block w-full"
+                    class="mt-1 block w-full border-gray-300 focus:border-green-500 focus:ring-green-500 rounded-md shadow-sm"
                     v-model="form.name"
                     required
                     autofocus
                     autocomplete="name"
                 />
-
                 <InputError class="mt-2" :message="form.errors.name" />
             </div>
 
             <div class="mt-4">
-                <InputLabel for="email" value="Email" />
-
+                <InputLabel for="email" value="Email Institucional" />
                 <TextInput
                     id="email"
                     type="email"
-                    class="mt-1 block w-full"
+                    class="mt-1 block w-full border-gray-300 focus:border-green-500 focus:ring-green-500 rounded-md shadow-sm"
                     v-model="form.email"
                     required
                     autocomplete="username"
+                    placeholder="exemplo@ua.pt"
                 />
-
                 <InputError class="mt-2" :message="form.errors.email" />
+            </div>
+
+            <div
+                v-if="form.role === 'professor'"
+                class="mt-4 p-4 bg-green-50 border border-green-200 rounded-md"
+            >
+                <InputLabel
+                    for="professor_key"
+                    value="Chave de Acesso (Enviada por Email)"
+                    class="text-green-800 font-semibold"
+                />
+                <TextInput
+                    id="professor_key"
+                    type="text"
+                    class="mt-1 block w-full border-green-300 focus:border-green-500 focus:ring-green-500 rounded-md shadow-sm"
+                    v-model="form.professor_key"
+                    :required="form.role === 'professor'"
+                    placeholder="Insira o código de regente..."
+                />
+                <InputError class="mt-2" :message="form.errors.professor_key" />
             </div>
 
             <div class="mt-4">
                 <InputLabel for="password" value="Password" />
-
                 <TextInput
                     id="password"
                     type="password"
-                    class="mt-1 block w-full"
+                    class="mt-1 block w-full border-gray-300 focus:border-green-500 focus:ring-green-500 rounded-md shadow-sm"
                     v-model="form.password"
                     required
                     autocomplete="new-password"
                 />
-
                 <InputError class="mt-2" :message="form.errors.password" />
             </div>
 
             <div class="mt-4">
                 <InputLabel
                     for="password_confirmation"
-                    value="Confirm Password"
+                    value="Confirmar Password"
                 />
-
                 <TextInput
                     id="password_confirmation"
                     type="password"
-                    class="mt-1 block w-full"
+                    class="mt-1 block w-full border-gray-300 focus:border-green-500 focus:ring-green-500 rounded-md shadow-sm"
                     v-model="form.password_confirmation"
                     required
                     autocomplete="new-password"
                 />
-
                 <InputError
                     class="mt-2"
                     :message="form.errors.password_confirmation"
                 />
             </div>
 
-            <div class="mt-4 flex items-center justify-end">
+            <div class="mt-6 flex items-center justify-between">
                 <Link
                     :href="route('login')"
-                    class="rounded-md text-sm text-gray-600 underline hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+                    class="text-sm text-green-600 underline hover:text-green-800 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2"
                 >
-                    Already registered?
+                    Já tens conta? Entrar
                 </Link>
 
                 <PrimaryButton
-                    class="ms-4"
+                    class="bg-green-600 hover:bg-green-700 focus:bg-green-700 active:bg-green-800"
                     :class="{ 'opacity-25': form.processing }"
                     :disabled="form.processing"
                 >
-                    Register
+                    Criar Conta
                 </PrimaryButton>
             </div>
         </form>

@@ -2,12 +2,14 @@
 
 namespace App\Models;
 
+use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 
-class User extends Authenticatable
+// Implementamos a interface MustVerifyEmail para trancar o acesso ao RAG
+class User extends Authenticatable implements MustVerifyEmail
 {
     use HasApiTokens, HasFactory, Notifiable;
 
@@ -16,6 +18,7 @@ class User extends Authenticatable
         'email',
         'password',
         'course_id',
+        'role', // ADICIONADO: Obrigatório para o User::create() no Controller funcionar
     ];
 
     protected $hidden = [

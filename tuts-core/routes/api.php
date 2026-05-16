@@ -1,20 +1,31 @@
 <?php
 
-use Illuminate\Http\Request;
+use App\Http\Controllers\Api\DashboardController;
+use App\Http\Controllers\Api\InternalMessageController;
 use Illuminate\Support\Facades\Route;
 
 /*
 |--------------------------------------------------------------------------
-| API Routes
+| API: Rotas de Professores / Administração
 |--------------------------------------------------------------------------
-| Aqui devem ficar apenas as rotas stateless (ex: App Mobile, Terceiros).
-| As rotas da aplicação Web (Vue/Inertia) que usam cookies de sessão 
-| estão definidas no routes/web.php com o prefixo /api/.
 */
+// Usamos auth:sanctum (padrão de APIs no Laravel) e um limite de taxa global
+Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
 
-// Deixamos apenas a rota padrão do Sanctum comentada para referência futura
-// Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
-//     return $request->user();
-// });
-Route::post('/messages/{id}/metadata', [\App\Http\Controllers\Api\ChatController::class, 'guardarMetadata']);
-Route::get('/dashboard/metrics', [\App\Http\Controllers\Api\DashboardController::class, 'getMetrics']);
+    // Proteção de Autorização (Gate/Policy): Apenas quem tem a permissão 'view-dashboard'
+    Route::middleware('can:view-dashboard')->group(function () {
+        Route::get('/dashboard/metrics', [DashboardController::class, 'getMetrics']);
+    });
+});
+
+/*
+|--------------------------------------------------------------------------
+| API: Rotas Internas (Comunicação RAG Python -> Laravel)
+|--------------------------------------------------------------------------
+*/
+// Grupo isolado. Protegido por limite de taxa dedicado e middleware de segurança.
+Route::middleware(['throttle:internal', 'internal.api'])->group(function () {
+
+    // Mantivemos a mesma rota que está configurada no services/analise.py do Python
+    Route::post('/messages/{id}/metadata', [InternalMessageController::class, 'guardarMetadata']);
+});

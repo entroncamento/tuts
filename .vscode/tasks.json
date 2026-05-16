@@ -54,7 +54,7 @@
     {
       "label": "2. FRONTEND (Vue.js)",
       "type": "shell",
-      "command": "wsl -d Ubuntu --cd /mnt/c/tuts-workspace/tuts-core bash -c 'echo \"A aguardar que o contentor do Laravel acorde...\"; while ! docker exec tuts-core-laravel.test-1 true 2>/dev/null; do sleep 2; done; echo \"Laravel Online! A iniciar Vue.js...\"; docker exec -it tuts-core-laravel.test-1 npm run dev'",
+      "command": "wsl -d Ubuntu --cd /mnt/c/tuts-workspace/tuts-core bash -c 'echo \"A aguardar que o contentor do Laravel acorde...\"; while ! docker exec tuts-core-laravel.test-1 true 2>/dev/null; do sleep 2; done; echo \"Laravel Online! A iniciar Vue.js...\"; docker exec -w /var/www/html tuts-core-laravel.test-1 npm run dev -- --host 0.0.0.0 --port 5173'",
       "isBackground": true,
       "presentation": {
         "group": "tuts-services",
@@ -69,7 +69,7 @@
     {
       "label": "3. RAG (Python)",
       "type": "shell",
-      "command": ".\\venv\\Scripts\\activate; python main.py",
+      "command": ".\\venv\\Scripts\\activate; uvicorn main:app --host 0.0.0.0 --port 8001 --env-file .env",
       "options": {
         "cwd": "${workspaceFolder}/tuts-rag-service"
       },

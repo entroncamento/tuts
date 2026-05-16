@@ -1,20 +1,36 @@
-# Ambientes Virtuais
-venv/
-env/
-.env
+# Ambientes virtuais Python
+**/venv/
+**/env/
+**/.venv/
+
+# Variáveis de ambiente / secrets
+**/.env
+**/.env.*
+**/credentials.json
+**/token.json
 
 # Cache do Python
-__pycache__/
-*.pyc
+**/__pycache__/
+**/*.pyc
+**/.pytest_cache/
 
-# Bases de Dados e Índices (Não subir ficheiros pesados!)
-tuts_logs.db
-faiss_db/
-database/data/
+# Bases de dados e índices locais/pesados
+**/tuts_logs.db
+**/*.sqlite
+**/*.db
+**/faiss_db/
+**/database/data/
 
-# Dependências do Node (caso tenhas frontend misturado)
-node_modules/
+# Dependências
+**/node_modules/
+**/vendor/
 
-# Ficheiros de credenciais do Google Calendar
-credentials.json
-token.json
+# Builds/cache
+**/dist/
+**/public/build/
+**/storage/logs/
+**/storage/framework/cache/
+**/bootstrap/cache/
+
+# PDFs / ficheiros gerados locais
+**/pdfs/
