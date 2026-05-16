@@ -69,7 +69,7 @@
     {
       "label": "3. RAG (Python)",
       "type": "shell",
-      "command": ".\\venv\\Scripts\\activate; uvicorn main:app --host 0.0.0.0 --port 8001 --env-file .env",
+      "command": ".\\venv\\Scripts\\python.exe -m uvicorn main:app --host 0.0.0.0 --port 8001 --env-file .env --reload --reload-dir . --reload-exclude venv --reload-exclude faiss_db --reload-exclude __pycache__ --reload-exclude pdfs",
       "options": {
         "cwd": "${workspaceFolder}/tuts-rag-service"
       },
