@@ -1,27 +1,40 @@
 import "../css/app.css";
 import "./bootstrap";
 
-import { createInertiaApp } from "@inertiajs/vue3";
-import { resolvePageComponent } from "laravel-vite-plugin/inertia-helpers";
 import { createApp, h } from "vue";
-import { ZiggyVue } from "ziggy-js";
+import { createPinia } from "pinia";
+import { createInertiaApp } from "@inertiajs/vue3";
+import { ZiggyVue, route as ziggyRoute } from "ziggy-js";
 
-const appName = import.meta.env.VITE_APP_NAME || "Laravel";
+import { router as figmaRouter } from "@/app/router";
+
+const appName = import.meta.env.VITE_APP_NAME || "TUT'S";
+const pinia = createPinia();
 
 createInertiaApp({
     title: (title) => `${title} - ${appName}`,
-    resolve: (name) =>
-        resolvePageComponent(
-            `./Pages/${name}.vue`,
-            import.meta.glob("./Pages/**/*.vue"),
-        ),
+
+    resolve: (name) => {
+        const pages = import.meta.glob("./Pages/**/*.vue", { eager: true });
+        return pages[`./Pages/${name}.vue`];
+    },
+
     setup({ el, App, props, plugin }) {
-        return createApp({ render: () => h(App, props) })
+        const ziggyConfig = props.initialPage.props.ziggy;
+
+        window.route = function (name, params, absolute, config = ziggyConfig) {
+            return ziggyRoute(name, params, absolute, config);
+        };
+
+        createApp({ render: () => h(App, props) })
             .use(plugin)
-            .use(ZiggyVue, props.initialPage.props.ziggy)
+            .use(pinia)
+            .use(figmaRouter)
+            .use(ZiggyVue, ziggyConfig)
             .mount(el);
     },
+
     progress: {
-        color: "#4B5563",
+        color: "#009957",
     },
 });
