@@ -91,7 +91,7 @@ class Settings(BaseSettings):
     score_minimo: float = -10.0
 
     # Score mínimo do reranker para considerar que há contexto suficiente
-    rerank_min_score_contexto: float = 0.5
+    rerank_min_score_contexto: float = -8
 
     max_image_mb: int = 4
     chunk_size: int = 1200

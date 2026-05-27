@@ -3,11 +3,82 @@ import time
 import hmac
 import hashlib
 import asyncio
+import re
 from config import logger, settings
 
 # Limites rigorosos para minimizar a exposição de dados a serviços de terceiros
 MAX_CHARS_PERGUNTA = 300
 MAX_CHARS_RESPOSTA = 400
+
+# O Laravel valida:
+# 'topicos.*' => string|max:80|regex:/^[\pL\pN\s\-_]+$/u
+MAX_TOPICOS = 3
+MAX_CHARS_TOPICO = 80
+
+
+def sanitizar_topico(topico: object) -> str:
+    """
+    Limpa um tópico antes de o enviar para o Laravel.
+
+    Remove caracteres que falham a regex do Laravel:
+    - apóstrofos: TUT'S -> TUTS
+    - barras: React/Vue -> ReactVue
+    - sinais: ES6+ -> ES6
+    - dois pontos, parênteses, tags HTML, etc.
+
+    Mantém:
+    - letras Unicode
+    - números
+    - espaços
+    - hífens
+    - underscores
+    """
+
+    texto = str(topico or "")
+
+    # Remove tags HTML por segurança.
+    texto = re.sub(r"<[^>]*>", "", texto)
+
+    # Remove tudo o que não seja letra/número/underscore/espaço/hífen.
+    # \w em Python com re.UNICODE cobre letras, números e underscore.
+    texto = re.sub(r"[^\w\s\-]", "", texto, flags=re.UNICODE)
+
+    # Normaliza whitespace.
+    texto = re.sub(r"\s+", " ", texto).strip()
+
+    return texto[:MAX_CHARS_TOPICO]
+
+
+def sanitizar_topicos(topicos: object) -> list[str]:
+    """
+    Garante que os tópicos enviados cumprem a validação do Laravel.
+    """
+
+    if not isinstance(topicos, list):
+        return []
+
+    topicos_limpos: list[str] = []
+
+    for topico in topicos[:MAX_TOPICOS]:
+        limpo = sanitizar_topico(topico)
+
+        if limpo:
+            topicos_limpos.append(limpo)
+
+    return topicos_limpos
+
+
+def normalizar_frustracao(valor: object) -> int:
+    """
+    O Laravel aceita 0..10. A IA pode devolver string, float ou lixo.
+    """
+
+    try:
+        frustracao = int(valor)
+    except (TypeError, ValueError):
+        frustracao = 0
+
+    return max(0, min(10, frustracao))
 
 
 def criar_assinatura_interna(payload: dict) -> tuple[str, str, bytes]:
@@ -41,7 +112,10 @@ def criar_assinatura_interna(payload: dict) -> tuple[str, str, bytes]:
 
 
 async def analisar_conversa_e_guardar(client, pergunta: str, resposta: str, message_id: int):
-    """Corre em background: lê a conversa de forma truncada, gera o JSON e envia para o Laravel."""
+    """
+    Corre em background: lê a conversa de forma truncada, gera o JSON
+    e envia metadados sanitizados para o Laravel.
+    """
 
     # 1. Minimização de Dados (Privacidade)
     pergunta_curta = pergunta[:MAX_CHARS_PERGUNTA].replace("```", "")
@@ -58,9 +132,15 @@ async def analisar_conversa_e_guardar(client, pergunta: str, resposta: str, mess
 
     ESTRUTURA EXATA DO JSON:
     {
-        "frustracao": (número inteiro de 1 a 10 avaliando o grau de dúvida/frustração do aluno),
+        "frustracao": (número inteiro de 0 a 10 avaliando o grau de dúvida/frustração do aluno),
         "topicos": ["palavra-chave 1", "palavra-chave 2"] (no máximo 3 tópicos)
     }
+
+    REGRAS PARA "topicos":
+    - Usa tópicos curtos.
+    - Não uses símbolos especiais.
+    - Não uses barras, apóstrofos, parênteses, dois pontos ou sinais +.
+    - Exemplos válidos: "JavaScript ES6", "React", "Hooks", "Client-side".
     """
 
     user_prompt = f"""
@@ -122,18 +202,18 @@ async def analisar_conversa_e_guardar(client, pergunta: str, resposta: str, mess
             dados_json_string = res_ia.json()["choices"][0]["message"]["content"]
             dados_json = json.loads(dados_json_string)
 
-            # 3. Validação simples antes de enviar para o Laravel
-            if not isinstance(dados_json.get("frustracao"), int) or not isinstance(dados_json.get("topicos"), list):
+            if not isinstance(dados_json, dict):
                 logger.warning(
-                    "[METADATA_BG][%s] IA devolveu JSON malformado: %s",
+                    "[METADATA_BG][%s] IA devolveu JSON que não é objeto: %s",
                     message_id,
-                    dados_json_string[:50],
+                    dados_json_string[:80],
                 )
                 return
 
-            # Garante limites seguros
-            dados_json["frustracao"] = max(1, min(10, int(dados_json["frustracao"])))
-            dados_json["topicos"] = [str(t)[:30] for t in dados_json["topicos"]][:3]
+            dados_json = {
+                "frustracao": normalizar_frustracao(dados_json.get("frustracao")),
+                "topicos": sanitizar_topicos(dados_json.get("topicos")),
+            }
 
             url_destino = f"{settings.laravel_url}/api/messages/{message_id}/metadata"
 
