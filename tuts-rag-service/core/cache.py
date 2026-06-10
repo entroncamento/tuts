@@ -1,6 +1,5 @@
 import asyncio
 import json
-import os
 import re
 import uuid
 from collections import defaultdict
@@ -14,7 +13,7 @@ from redis.commands.search.index_definition import IndexDefinition, IndexType
 from redis.commands.search.query import Query
 
 from config import MANIFEST_FILE, logger, settings
-from core.utils import limpar_nome_uc
+from core.utils import limpar_nome_uc, resolver_pasta_faiss_uc
 
 
 faiss_cache: dict[str, FAISS] = {}
@@ -104,13 +103,13 @@ def _redis_erro_indica_modulo_ausente(exc: Exception) -> bool:
 
 def obter_versao_uc(uc: str) -> str:
     uc_norm = _normalizar_uc_cache(uc)
-    manifest_path = os.path.join(settings.base_faiss_dir, uc_norm, MANIFEST_FILE)
+    manifest_path = resolver_pasta_faiss_uc(uc_norm) / MANIFEST_FILE
 
-    if not os.path.exists(manifest_path):
+    if not manifest_path.exists():
         return "sem_versao"
 
     try:
-        with open(manifest_path, "r", encoding="utf-8") as f:
+        with manifest_path.open("r", encoding="utf-8") as f:
             manifest = json.load(f)
 
         return _normalizar_versao_cache(manifest.get("version", "sem_versao"))

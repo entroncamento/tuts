@@ -1,0 +1,104 @@
+{
+  "version": "2.0.0",
+  "presentation": {
+    "panel": "shared",
+    "showReuseMessage": false,
+    "clear": true,
+    "echo": false,
+    "focus": false
+  },
+  "tasks": [
+    {
+      "label": "TUTS: Arrancar Tudo",
+      "dependsOn": [
+        "0. REDIS (Memória Vetorial)",
+        "1. BACKEND (Laravel Octane)",
+        "2. FRONTEND (Vue.js)",
+        "3. RAG (Python)",
+        "4. GIT"
+      ],
+      "dependsOrder": "parallel",
+      "runOptions": {
+        "runOn": "folderOpen"
+      },
+      "icon": {
+        "id": "play-circle",
+        "color": "terminal.ansiGreen"
+      }
+    },
+    {
+      "label": "0. REDIS (Memória Vetorial)",
+      "type": "shell",
+      "command": "wsl docker start redis-stack",
+      "presentation": {
+        "reveal": "silent",
+        "close": true,
+        "panel": "dedicated"
+      }
+    },
+    {
+      "label": "1. BACKEND (Laravel Octane)",
+      "type": "shell",
+      "command": "wsl -d Ubuntu --cd /mnt/c/tuts-workspace/tuts-core bash -c './vendor/bin/sail up'",
+      "isBackground": true,
+      "presentation": {
+        "group": "tuts-services",
+        "panel": "new"
+      },
+      "icon": {
+        "id": "server-environment",
+        "color": "terminal.ansiRed"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "2. FRONTEND (Vue.js)",
+      "type": "shell",
+      "command": "wsl -d Ubuntu --cd /mnt/c/tuts-workspace/tuts-core bash -c 'echo \"A aguardar que o contentor do Laravel acorde...\"; while ! docker exec tuts-core-laravel.test-1 true 2>/dev/null; do sleep 2; done; echo \"Laravel Online! A iniciar Vue.js com auto reload...\"; docker exec -e CHOKIDAR_USEPOLLING=true -e CHOKIDAR_INTERVAL=500 -e WATCHPACK_POLLING=true -it tuts-core-laravel.test-1 npm run dev -- --host 0.0.0.0'",
+      "isBackground": true,
+      "presentation": {
+        "group": "tuts-services",
+        "panel": "new"
+      },
+      "icon": {
+        "id": "browser",
+        "color": "terminal.ansiCyan"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "3. RAG (Python)",
+      "type": "shell",
+      "command": ".\\venv\\Scripts\\python.exe -m uvicorn main:app --host 0.0.0.0 --port 8001 --env-file .env --reload --reload-dir . --reload-exclude venv --reload-exclude faiss_db --reload-exclude __pycache__ --reload-exclude pdfs",
+      "options": {
+        "cwd": "${workspaceFolder}/tuts-rag-service"
+      },
+      "isBackground": true,
+      "presentation": {
+        "group": "tuts-services",
+        "panel": "new"
+      },
+      "icon": {
+        "id": "hubot",
+        "color": "terminal.ansiYellow"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "4. GIT",
+      "type": "shell",
+      "command": "powershell.exe -NoExit",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "presentation": {
+        "group": "tuts-workspace",
+        "panel": "new"
+      },
+      "icon": {
+        "id": "terminal-powershell",
+        "color": "terminal.ansiMagenta"
+      }
+    }
+  ]
+}

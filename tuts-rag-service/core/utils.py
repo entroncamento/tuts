@@ -1,7 +1,7 @@
 import re
-import numpy as np
 import unicodedata
 import logging
+from pathlib import Path
 
 # Reutilizar o logger configurado do sistema
 logger = logging.getLogger("tuts")
@@ -18,6 +18,53 @@ def limpar_nome_uc(uc: str) -> str:
     
     # Limite de 80 caracteres para prevenir erros no File System (Path Too Long)
     return re.sub(r"_+", "_", limpo).strip("_").lower()[:80]
+
+
+def _base_faiss_dir() -> Path:
+    from config import settings
+
+    return Path(settings.base_faiss_dir)
+
+
+def pasta_faiss_canonica_uc(uc: str) -> Path:
+    """
+    Caminho canonico para novas pastas FAISS.
+
+    Novas ingestoes devem escrever sempre nesta pasta. Pastas antigas podem
+    continuar a ser lidas atraves de resolver_pasta_faiss_uc().
+    """
+    return _base_faiss_dir() / limpar_nome_uc(uc)
+
+
+def resolver_pasta_faiss_uc(uc: str) -> Path:
+    """
+    Resolve a pasta FAISS de uma UC com compatibilidade para nomes legacy.
+
+    A ordem e:
+    1. pasta canonica;
+    2. primeira pasta existente em faiss_db cujo nome normalizado seja igual;
+    3. caminho canonico, mesmo que ainda nao exista.
+
+    Esta funcao nunca renomeia nem apaga pastas.
+    """
+    nome_normalizado = limpar_nome_uc(uc)
+    caminho_canonico = _base_faiss_dir() / nome_normalizado
+
+    if caminho_canonico.exists():
+        return caminho_canonico
+
+    base = _base_faiss_dir()
+    if base.exists():
+        for pasta in sorted(base.iterdir(), key=lambda p: p.name.lower()):
+            if pasta.is_dir() and limpar_nome_uc(pasta.name) == nome_normalizado:
+                logger.warning(
+                    "A usar pasta FAISS legacy para UC '%s': %s",
+                    uc,
+                    pasta,
+                )
+                return pasta
+
+    return caminho_canonico
 
 
 def sanitizar_input(texto: str, max_chars: int = 4000) -> str:
@@ -41,6 +88,8 @@ def cosine_similarity(v1: list[float], v2: list[float]) -> float:
     Calcula a similaridade de cosseno de forma segura.
     Valida as dimensões dos vetores antes de calcular para evitar exceções matemáticas.
     """
+    import numpy as np
+
     a, b = np.asarray(v1, dtype=np.float32), np.asarray(v2, dtype=np.float32)
     
     # Prevenção de ValueError no dot product

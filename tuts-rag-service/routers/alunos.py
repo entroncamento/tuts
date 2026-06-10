@@ -2,7 +2,6 @@ import uuid
 import json
 import asyncio
 import secrets
-import random
 from typing import Annotated, AsyncIterator
 
 from fastapi import (
@@ -41,6 +40,11 @@ router = APIRouter()
 
 MAX_HISTORICO_MENSAGENS = 10
 MAX_HISTORICO_BYTES = 10_000
+
+# Proteção para rerankers que devolvem scores negativos.
+# O cross-encoder mmarco usado no TUT'S pode devolver scores entre -4 e -7
+# mesmo quando os excertos são úteis. Portanto 0.5 é demasiado agressivo.
+RERANK_MIN_SCORE_SEGURO = -8.0
 
 
 def sse(data: dict) -> str:
@@ -91,6 +95,13 @@ def _score_float(score) -> float | None:
         return None
 
 
+def _score_legivel(score: float | None) -> str:
+    if score is None:
+        return "sem score"
+
+    return f"{score:.2f}"
+
+
 def _eh_debug_useeffect_loop(texto: str) -> bool:
     t = (texto or "").lower()
     return (
@@ -123,87 +134,239 @@ def _query_rerank_especial(texto: str) -> str:
     return texto
 
 
+def _min_score_contexto_calibrado(
+    textos_finais: list[str],
+    texto_final_aluno: str,
+) -> float:
+    """
+    Calcula o threshold real usado para decidir se há contexto suficiente.
+
+    Importante:
+    - settings.rerank_min_score_contexto pode vir mal configurado pelo .env.
+    - O modelo mmarco pode devolver scores negativos úteis.
+    - Se há textos_finais recuperados, nunca devemos usar um threshold positivo
+      como 0.5, porque isso força falsos "sem contexto".
+    """
+
+    min_score_original = float(
+        getattr(settings, "rerank_min_score_contexto", RERANK_MIN_SCORE_SEGURO)
+    )
+
+    min_score_contexto = min_score_original
+
+    if textos_finais and min_score_contexto > RERANK_MIN_SCORE_SEGURO:
+        logger.warning(
+            "[RAG] rerank_min_score_contexto demasiado alto (%s). "
+            "A forçar %s porque há textos_finais recuperados.",
+            min_score_contexto,
+            RERANK_MIN_SCORE_SEGURO,
+        )
+        min_score_contexto = RERANK_MIN_SCORE_SEGURO
+
+    if _eh_debug_useeffect_loop(texto_final_aluno):
+        min_score_contexto = min(min_score_contexto, -2.0)
+
+    return min_score_contexto
+
+
 class GeradorPensamentos:
+    """
+    Isto não tenta simular pensamento interno da IA.
+
+    São mensagens reais de progresso do pipeline:
+    - receção da pergunta
+    - expansão de queries
+    - retrieval
+    - leitura dos excertos
+    - reranking
+    - decisão sobre contexto suficiente
+    - preparação da resposta final
+    """
+
     @staticmethod
-    def intencao(texto: str, modo: str) -> str:
-        assunto = texto[:35] + "..." if len(texto) > 35 else texto
-        verbos = ["A descodificar", "A analisar", "A mapear", "A refletir sobre"]
-        focos = [
-            "o núcleo da tua pergunta",
-            f"a intenção por trás de '{assunto}'",
-            f"o que procuras saber sobre '{assunto}'",
-        ]
+    def _resumir_texto(texto: str, limite: int = 52) -> str:
+        t = " ".join((texto or "").split()).strip()
 
-        if modo == "quiz":
-            return random.choice(
-                [
-                    "A desenhar o esqueleto do quiz...",
-                    f"A planear um desafio sobre '{assunto}'...",
-                ]
+        if not t:
+            return "a pergunta"
+
+        if len(t) <= limite:
+            return t
+
+        return t[: limite - 3].rstrip() + "..."
+
+    @staticmethod
+    def _termos_queries(queries: list[str], limite: int = 3) -> list[str]:
+        termos = []
+
+        for query in queries:
+            q = " ".join((query or "").replace('"', "").split()).strip()
+
+            if not q:
+                continue
+
+            if q not in termos:
+                termos.append(GeradorPensamentos._resumir_texto(q, 48))
+
+            if len(termos) >= limite:
+                break
+
+        return termos
+
+    @staticmethod
+    def inicio(
+        texto: str,
+        modo: str,
+        tem_imagem: bool,
+        num_mensagens_historico: int,
+    ) -> str:
+        pergunta = GeradorPensamentos._resumir_texto(texto)
+        extras = []
+
+        if tem_imagem:
+            extras.append("imagem/OCR")
+
+        if num_mensagens_historico:
+            extras.append(f"{num_mensagens_historico} mensagens de histórico")
+
+        contexto_extra = f" Também recebi {', '.join(extras)}." if extras else ""
+
+        if modo and modo != "default":
+            return (
+                f"Recebi a pergunta “{pergunta}” e vou tratá-la no modo {modo}."
+                f"{contexto_extra}"
             )
 
-        if modo == "feynman":
-            return random.choice(
-                [
-                    f"Como posso simplificar '{assunto}'?",
-                    "A preparar uma explicação base...",
-                ]
+        return f"Recebi a pergunta “{pergunta}” e vou procurar suporte nos materiais da UC.{contexto_extra}"
+
+    @staticmethod
+    def cache_hit() -> str:
+        return (
+            "Encontrei uma resposta compatível na cache semântica desta UC. "
+            "Vou reutilizá-la sem repetir a pesquisa aos documentos."
+        )
+
+    @staticmethod
+    def expansao(
+        queries: list[str],
+        fallback_usado: bool,
+    ) -> str:
+        termos = GeradorPensamentos._termos_queries(queries)
+
+        if fallback_usado:
+            return (
+                "A expansão automática falhou, por isso vou pesquisar com a pergunta original "
+                "e variações locais seguras."
             )
 
-        if modo == "visual":
-            return random.choice(
-                [
-                    f"A transformar '{assunto}' numa estrutura visual...",
-                    "A organizar dados para diagrama...",
-                ]
-            )
+        if not queries:
+            return "Não consegui gerar queries adicionais. Vou pesquisar diretamente pela pergunta original."
 
-        if modo == "plano":
-            return random.choice(
-                [
-                    f"A estruturar um plano de estudo para '{assunto}'...",
-                    "A organizar a matéria...",
-                ]
-            )
+        if len(queries) == 1:
+            return f"Preparei 1 consulta de pesquisa: “{termos[0]}”."
 
-        return f"{random.choice(verbos)} {random.choice(focos)}..."
+        termos_txt = "”, “".join(termos)
+        extra = "" if len(queries) <= len(termos) else f" e mais {len(queries) - len(termos)}"
+
+        return f"Preparei {len(queries)} consultas de pesquisa: “{termos_txt}”{extra}."
 
     @staticmethod
     def pesquisa(queries: list[str], uc: str) -> str:
-        termos = [q.replace('"', "") for q in queries][:2]
+        total = len(queries)
 
-        if not termos:
-            termos = ["a tua pergunta"]
+        if total == 0:
+            return f"Vou pesquisar diretamente nos materiais indexados da UC “{uc}”."
 
-        str_termos = " e ".join(termos)
+        return (
+            f"A pesquisar na UC “{uc}” com {total} consulta"
+            f"{'' if total == 1 else 's'} contra o índice vetorial e o índice lexical."
+        )
 
-        return random.choice(
-            [
-                f"Vou procurar por '{str_termos}' nos materiais da cadeira.",
-                f"A cruzar os conceitos com a base vetorial de '{uc}'.",
-            ]
+    @staticmethod
+    def retrieval(num_candidatos: int, tem_bm25: bool, modo_resumo: bool) -> str:
+        motor = "FAISS + BM25" if tem_bm25 else "FAISS"
+        escopo = " com janela alargada por ser uma pergunta de resumo" if modo_resumo else ""
+
+        if num_candidatos == 0:
+            return f"O retrieval {motor} não devolveu candidatos relevantes{escopo}."
+
+        return (
+            f"O retrieval {motor} devolveu {num_candidatos} excerto"
+            f"{'' if num_candidatos == 1 else 's'} candidato"
+            f"{'' if num_candidatos == 1 else 's'}{escopo}."
         )
 
     @staticmethod
     def leitura(ficheiros: set[str], num_blocos: int) -> str:
-        # Não expomos nomes de ficheiros aqui para evitar fuga de paths/metadados internos.
-        return random.choice(
-            [
-                f"Encontrei {num_blocos} blocos de texto promissores nos materiais da UC.",
-                f"A folhear {num_blocos} parágrafos relevantes...",
-                f"Extraí {num_blocos} excertos diretos. A ler a matéria...",
-            ]
+        if num_blocos == 0:
+            return "Não há excertos recuperados para ler nesta passagem."
+
+        num_fontes = len(ficheiros)
+
+        if num_fontes == 0:
+            return (
+                f"Vou analisar {num_blocos} excerto"
+                f"{'' if num_blocos == 1 else 's'} recuperado"
+                f"{'' if num_blocos == 1 else 's'}, sem metadados de ficheiro visíveis."
+            )
+
+        return (
+            f"Vou analisar {num_blocos} excerto"
+            f"{'' if num_blocos == 1 else 's'} recuperado"
+            f"{'' if num_blocos == 1 else 's'} de {num_fontes} fonte"
+            f"{'' if num_fontes == 1 else 's'} da UC."
         )
 
     @staticmethod
-    def avaliacao(num_finais: int, modo: str) -> str:
-        if num_finais == 0:
+    def reranking(
+        num_antes_filtro: int,
+        score_max: float | None,
+        min_score_contexto: float,
+    ) -> str:
+        if num_antes_filtro == 0:
+            return "O reranker não encontrou excertos finais suficientemente alinhados com a pergunta."
+
+        return (
+            f"O reranker selecionou {num_antes_filtro} excerto"
+            f"{'' if num_antes_filtro == 1 else 's'} final"
+            f"{'' if num_antes_filtro == 1 else 'ais'}; "
+            f"melhor score: {_score_legivel(score_max)} "
+            f"(mínimo configurado: {min_score_contexto:.2f})."
+        )
+
+    @staticmethod
+    def decisao_contexto(
+        sem_contexto: bool,
+        num_finais_validos: int,
+        score_max: float | None,
+        min_score_contexto: float,
+    ) -> str:
+        if sem_contexto:
+            if score_max is None:
+                return (
+                    "Não consegui validar contexto suficiente nos materiais da UC. "
+                    "Vou responder de forma conservadora e assinalar a falta de suporte documental."
+                )
+
             return (
-                "Não encontrei suporte suficiente nos materiais da UC. "
-                "Vou responder de forma conservadora."
+                f"O melhor score foi {_score_legivel(score_max)}, abaixo do mínimo "
+                f"{min_score_contexto:.2f}. Vou tratar isto como sem contexto suficiente."
             )
 
-        return f"Filtrei o ruído. Fiquei com os {num_finais} parágrafos mais relevantes."
+        return (
+            f"Contexto validado: vou responder usando {num_finais_validos} excerto"
+            f"{'' if num_finais_validos == 1 else 's'} final"
+            f"{'' if num_finais_validos == 1 else 'ais'} dos materiais da UC."
+        )
+
+    @staticmethod
+    def prompt_pronto(sem_contexto: bool) -> str:
+        if sem_contexto:
+            return (
+                "A montar a resposta final em modo conservador, sem inventar informação fora dos materiais."
+            )
+
+        return "A montar a resposta final com o contexto recuperado e as regras de citação da UC."
 
 
 async def _emitir_stream_com_buffer(
@@ -320,8 +483,6 @@ async def perguntar(
 
     versao_uc = obter_versao_uc(uc_limpa)
 
-    # Cache só é usada se o cliente NÃO pedir bypass_cache.
-    # Isto permite ao script de avaliação científica evitar tocar no Redis.
     cache_apto = (
         not bypass_cache
         and getattr(settings, "semantic_cache_enabled", True)
@@ -367,11 +528,7 @@ async def perguntar(
                 }
             )
 
-            yield sse(
-                {
-                    "status_msg": "Déjà vu! Fui buscar esta resposta à memória de longo prazo."
-                }
-            )
+            yield sse({"status_msg": GeradorPensamentos.cache_hit()})
 
             yield sse({"chunk": resposta_cacheada["resposta_stu"]})
 
@@ -395,12 +552,16 @@ async def perguntar(
 
         yield sse(
             {
-                "status_msg": GeradorPensamentos.intencao(
+                "status_msg": GeradorPensamentos.inicio(
                     texto_final_aluno,
                     preferencia_efetiva.value,
+                    tem_imagem,
+                    len(mensagens_historico),
                 )
             }
         )
+
+        expansao_fallback = False
 
         try:
             queries_pesquisa = await expandir_queries(
@@ -418,13 +579,23 @@ async def perguntar(
                 type(e).__name__,
             )
             queries_pesquisa = [texto_final_aluno]
-            
+            expansao_fallback = True
+
         queries_locais = _queries_locais_react_debug(texto_final_aluno)
         queries_pesquisa = list(
             dict.fromkeys(
                 queries_locais + queries_pesquisa + [texto_final_aluno]
             )
         )[:10]
+
+        yield sse(
+            {
+                "status_msg": GeradorPensamentos.expansao(
+                    queries_pesquisa,
+                    expansao_fallback,
+                )
+            }
+        )
 
         yield sse(
             {
@@ -444,6 +615,16 @@ async def perguntar(
             settings.faiss_k * 2 if modo_resumo else settings.faiss_k,
         )
 
+        yield sse(
+            {
+                "status_msg": GeradorPensamentos.retrieval(
+                    len(docs_hibridos),
+                    bm25 is not None,
+                    modo_resumo,
+                )
+            }
+        )
+
         ficheiros_apanhados = set()
 
         for doc in docs_hibridos:
@@ -460,17 +641,14 @@ async def perguntar(
                 if len(partes) >= 2:
                     ficheiros_apanhados.add(partes[0].strip())
 
-        if ficheiros_apanhados:
-            yield sse(
-                {
-                    "status_msg": GeradorPensamentos.leitura(
-                        ficheiros_apanhados,
-                        len(docs_hibridos),
-                    )
-                }
-            )
-        else:
-            yield sse({"status_msg": f"A procurar {len(docs_hibridos)} blocos cegos..."})
+        yield sse(
+            {
+                "status_msg": GeradorPensamentos.leitura(
+                    ficheiros_apanhados,
+                    len(docs_hibridos),
+                )
+            }
+        )
 
         query_para_rerank = _query_rerank_especial(texto_final_aluno)
 
@@ -481,13 +659,22 @@ async def perguntar(
         )
 
         score_max_float = _score_float(score_max)
-        min_score_contexto = float(getattr(settings, "rerank_min_score_contexto", 2.0))
+        min_score_contexto = _min_score_contexto_calibrado(
+            textos_finais,
+            texto_final_aluno,
+        )
 
-        # Caso especial: perguntas de debug sobre useEffect podem não aparecer nos materiais
-        # com a expressão "loop infinito", mas estar suportadas por chunks sobre dependências,
-        # atualização de estado e componentDidUpdate.
-        if _eh_debug_useeffect_loop(texto_final_aluno):
-            min_score_contexto = min(min_score_contexto, -2.0)
+        num_textos_antes_filtro = len(textos_finais)
+
+        yield sse(
+            {
+                "status_msg": GeradorPensamentos.reranking(
+                    num_textos_antes_filtro,
+                    score_max_float,
+                    min_score_contexto,
+                )
+            }
+        )
 
         score_insuficiente = (
             score_max_float is None
@@ -505,14 +692,25 @@ async def perguntar(
                 texto_final_aluno[:120],
             )
             textos_finais = []
+        else:
+            logger.info(
+                "[RAG] Contexto validado | uc=%s | score_max=%s | min=%s | blocos=%s | pergunta=%s",
+                uc_limpa,
+                score_max_float,
+                min_score_contexto,
+                len(textos_finais),
+                texto_final_aluno[:120],
+            )
 
         yield sse({"sem_contexto": flag_sem_contexto})
 
         yield sse(
             {
-                "status_msg": GeradorPensamentos.avaliacao(
+                "status_msg": GeradorPensamentos.decisao_contexto(
+                    flag_sem_contexto,
                     len(textos_finais),
-                    preferencia_efetiva.value,
+                    score_max_float,
+                    min_score_contexto,
                 )
             }
         )
@@ -534,6 +732,8 @@ async def perguntar(
             alta_precisao=flag_sem_contexto,
             sem_contexto=flag_sem_contexto,
         )
+
+        yield sse({"status_msg": GeradorPensamentos.prompt_pronto(flag_sem_contexto)})
 
         full_response = ""
         houve_erro = False

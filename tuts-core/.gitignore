@@ -1,32 +1,53 @@
-*.log
-.DS_Store
+# Ambientes virtuais Python
+**/venv/
+**/env/
+**/.venv/
+
+# Variáveis de ambiente / secrets
 .env
-.env.backup
-.env.production
-.phpactor.json
-.phpunit.result.cache
-/.fleet
-/.idea
-/.nova
-/.phpunit.cache
-/.vscode
-/.zed
-/auth.json
-/node_modules
-/public/build
+.env.*
+**/.env
+**/.env.*
+**/credentials.json
+**/token.json
+
+# Cache do Python
+**/__pycache__/
+**/*.pyc
+**/.pytest_cache/
+
+# Bases de dados e índices locais/pesados
+**/tuts_logs.db
+**/*.sqlite
+**/*.db
+**/faiss_db/
+**/database/data/
+
+# Dependências
+**/node_modules/
+**/vendor/
+
+# Builds/cache
+**/dist/
+**/public/build/
+**/storage/logs/
+**/storage/framework/cache/
+**/storage/framework/views/*
+!**/storage/framework/views/.gitignore
+**/bootstrap/cache/*
+
+# Laravel / Vite locais
 /public/hot
 /public/storage
-/storage/*.key
-/storage/pail
-/vendor
-Homestead.json
-Homestead.yaml
+/public/C:*
+
+# PDFs / ficheiros gerados locais
+**/pdfs/
+
+# Windows / WSL lixo
+*Zone.Identifier
 Thumbs.db
+.DS_Store
 
-**/caddy
-frankenphp
-frankenphp-worker.php
-
-**/caddy
-frankenphp
-frankenphp-worker.php
+# ficheiros de debug / árvore
+tree_tuts_core.txt

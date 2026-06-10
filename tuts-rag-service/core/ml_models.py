@@ -37,7 +37,7 @@ if getattr(settings, "usar_ocr", False):
     except Exception as e:
         logger.error("Falha ao inicializar o OCR: %s", type(e).__name__)
 else:
-    logger.warning("⚠️ OCR DESATIVADO por configuração (usar_ocr=False).")
+    logger.warning("⚠️ OCR DESATIVADO por configuração (usar_ocr=True).")
 
 # ── 3. SEGREGAÇÃO DE RECURSOS (PREVENÇÃO DE DoS E TIMEOUTS) ───────────────────
 _cpu_count = os.cpu_count() or 1

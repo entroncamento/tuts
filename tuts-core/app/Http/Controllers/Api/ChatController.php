@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Chat;
 use App\Models\Message;
+use App\Models\SpaceFolder;
+use App\Models\StudySpace;
 use App\Models\Subject;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -20,10 +22,11 @@ class ChatController extends Controller
             ->get()
             ->reverse()
             ->values()
-            ->map(fn($m) => [
+            ->map(fn ($m) => [
                 'role' => $m->role === 'ai' ? 'assistant' : 'user',
                 'content' => $m->content,
-            ])->toJson();
+            ])
+            ->toJson();
     }
 
     private function requireAuthenticatedUserId(): int
@@ -35,6 +38,24 @@ class ChatController extends Controller
         }
 
         return (int) $userId;
+    }
+
+    private function userCanAccessSubject(Subject $subject): bool
+    {
+        $user = Auth::user();
+
+        if (!$user) {
+            return false;
+        }
+
+        if ($user->role === 'professor' || $user->role === 'teacher') {
+            return true;
+        }
+
+        return $subject
+            ->courses()
+            ->where('courses.id', $user->course_id)
+            ->exists();
     }
 
     private function looksLikeTechnicalError(string $text): bool
@@ -55,49 +76,109 @@ class ChatController extends Controller
 
     public function criarChat(Request $request)
     {
-        $request->validate([
+        $validated = $request->validate([
             'subject_id' => 'nullable|exists:subjects,id',
+            'space_id' => 'nullable|exists:study_spaces,id',
+            'folder_id' => 'nullable|exists:space_folders,id',
+            'context_type' => 'nullable|string|in:uc,space,temporary',
             'title' => 'nullable|string|max:255',
         ]);
 
         $userId = $this->requireAuthenticatedUserId();
+        $contextType = $validated['context_type'] ?? 'uc';
+        $subjectId = $validated['subject_id'] ?? null;
+        $spaceId = $validated['space_id'] ?? null;
+        $folderId = $validated['folder_id'] ?? null;
+
+        if ($contextType === 'uc' && !$subjectId) {
+            abort(422, 'Tens de escolher uma UC para criar uma conversa de UC.');
+        }
+
+        if ($contextType === 'space' && !$spaceId) {
+            abort(422, 'Tens de escolher um Espaço para criar uma conversa de Espaço.');
+        }
+
+        if ($subjectId) {
+            $subject = Subject::findOrFail($subjectId);
+            abort_unless($this->userCanAccessSubject($subject), 403, 'Acesso negado à UC escolhida.');
+        }
+
+        if ($spaceId) {
+            StudySpace::query()
+                ->where('id', $spaceId)
+                ->where('user_id', $userId)
+                ->firstOrFail();
+        }
+
+        if ($folderId) {
+            SpaceFolder::query()
+                ->where('id', $folderId)
+                ->where('study_space_id', $spaceId)
+                ->where('user_id', $userId)
+                ->firstOrFail();
+        }
 
         $chat = Chat::create([
             'user_id' => $userId,
-            'subject_id' => $request->input('subject_id'),
-            'title' => $request->input('title', 'Nova Conversa com o TUT\'S'),
+            'subject_id' => $contextType === 'uc' ? $subjectId : null,
+            'study_space_id' => $contextType === 'space' ? $spaceId : null,
+            'space_folder_id' => $contextType === 'space' ? $folderId : null,
+            'context_type' => $contextType,
+            'is_temporary' => $contextType === 'temporary',
+            'title' => $validated['title'] ?? 'Nova Conversa com o TUT\'S',
         ]);
 
-        return response()->json(['status' => 'sucesso', 'chat_id' => $chat->id]);
+        return response()->json([
+            'status' => 'sucesso',
+            'chat_id' => $chat->id,
+            'chat' => $this->formatChat($chat),
+        ]);
     }
 
     public function enviarPerguntaStream(Request $request)
     {
-        // 1. Validação de Limites de Input (Prevenção DoS)
         $request->validate([
             'chat_id' => 'nullable|integer|exists:chats,id',
             'texto' => 'required|string|max:4000',
-            'uc' => 'required|string|exists:subjects,name',
+            'uc' => 'nullable|string|max:255',
+            'context_type' => 'nullable|string|in:uc,space,temporary',
+            'space_id' => 'nullable|integer|exists:study_spaces,id',
+            'folder_id' => 'nullable|integer|exists:space_folders,id',
             'preferencia' => 'nullable|string|in:default,visual,plano,quiz,feynman',
             'imagem' => 'nullable|image|max:4096',
         ]);
 
-        $user = Auth::user();
         $userId = $this->requireAuthenticatedUserId();
+        $contextType = $request->input('context_type', 'uc');
+        $subject = null;
+        $space = null;
+        $folder = null;
 
-        // 2. Validação Académica (Autorização por UC/Curso)
-        $subject = Subject::where('name', $request->uc)->firstOrFail();
+        if ($contextType === 'uc') {
+            if (!$request->filled('uc')) {
+                abort(422, 'Tens de escolher uma UC antes de perguntar ao TUT\'S.');
+            }
 
-        // Verifica se o aluno pertence a um dos cursos associados à UC.
-        // A relação UC ↔ curso é feita pela tabela pivot course_subject.
-        if ($user->role !== 'professor') {
-            $temAcessoAUc = $subject
-                ->courses()
-                ->where('courses.id', $user->course_id)
-                ->exists();
+            $subject = Subject::where('name', $request->uc)->firstOrFail();
+            abort_unless($this->userCanAccessSubject($subject), 403, 'Acesso negado. Não está inscrito no curso desta Unidade Curricular.');
+        }
 
-            if (!$temAcessoAUc) {
-                abort(403, 'Acesso negado. Não está inscrito no curso desta Unidade Curricular.');
+        if ($contextType === 'space') {
+            if (!$request->filled('space_id')) {
+                abort(422, 'Tens de escolher um Espaço antes de perguntar ao TUT\'S.');
+            }
+
+            $space = StudySpace::query()
+                ->where('id', (int) $request->space_id)
+                ->where('user_id', $userId)
+                ->firstOrFail();
+
+            if ($request->filled('folder_id')) {
+                $folder = SpaceFolder::query()
+                    ->where('id', (int) $request->folder_id)
+                    ->where('study_space_id', $space->id)
+                    ->where('user_id', $userId)
+                    ->firstOrFail();
             }
         }
 
@@ -105,15 +186,36 @@ class ChatController extends Controller
             $chat = Chat::where('id', (int) $request->chat_id)
                 ->where('user_id', $userId)
                 ->firstOrFail();
+
+            if ($contextType === 'uc' && $subject && (int) $chat->subject_id !== (int) $subject->id) {
+                abort(422, 'O chat indicado não pertence à Unidade Curricular atual.');
+            }
+
+            if ($contextType === 'space' && $space && (int) $chat->study_space_id !== (int) $space->id) {
+                abort(422, 'O chat indicado não pertence ao Espaço atual.');
+            }
+
+            if ($contextType === 'space' && $folder && !$chat->space_folder_id) {
+                $chat->update(['space_folder_id' => $folder->id]);
+            }
         } else {
+            $tituloBase = trim((string) $request->texto);
+            $titulo = $tituloBase !== '' ? mb_substr($tituloBase, 0, 80) : 'Chat TUT\'S';
+
             $chat = Chat::create([
                 'user_id' => $userId,
-                'subject_id' => $subject->id,
-                'title' => 'Chat de ' . $request->uc,
+                'subject_id' => $subject?->id,
+                'study_space_id' => $space?->id,
+                'space_folder_id' => $folder?->id,
+                'context_type' => $contextType,
+                'is_temporary' => $contextType === 'temporary',
+                'title' => $titulo,
             ]);
         }
 
-        $historico = $this->buildHistorico($chat->id);
+        $chatId = (int) $chat->id;
+        $threadId = (string) $chatId;
+        $historico = $this->buildHistorico($chatId);
 
         $imagemPath = null;
         $imagemNome = null;
@@ -126,42 +228,46 @@ class ChatController extends Controller
             $imagemMime = $file->getMimeType() ?? 'image/jpeg';
         }
 
-        // 3. Validação do Serviço Interno e Defesa de Redes
         $urlPython = config('services.python.url', 'http://127.0.0.1:8001/perguntar');
         $internalToken = trim((string) config('services.python.internal_token', ''));
 
-        // Fail Early: Se o token estiver vazio, aborta imediatamente em vez de enviar um request inútil
         if ($internalToken === '') {
             abort(500, 'Configuração crítica: Token interno do serviço IA não configurado.');
         }
 
-        // Validação da Whitelist do Host (Evita que variáveis de ambiente maliciosas desviem o tráfego)
         $parsedUrl = parse_url($urlPython);
-        $allowedHosts = ['127.0.0.1', 'localhost', 'tuts-rag-service', env('PYTHON_HOST')];
+
+        $allowedHosts = array_filter([
+            '127.0.0.1',
+            'localhost',
+            'tuts-rag-service',
+            'host.docker.internal',
+            env('PYTHON_HOST'),
+        ]);
+
         if (!in_array($parsedUrl['host'] ?? '', $allowedHosts, true)) {
             abort(500, 'Configuração insegura: O Host do serviço de IA não é de confiança.');
         }
 
         $texto = $request->texto;
-        $uc = $request->uc;
         $preferencia = $request->input('preferencia', 'default');
-        $threadId = (string) $chat->id;
-        $chatId = $chat->id;
+        $uc = match ($contextType) {
+            'uc' => $subject?->name ?? (string) $request->uc,
+            'space' => 'Espaço: ' . ($space?->name ?? 'Sem nome'),
+            default => 'Conversa temporária',
+        };
 
-        // Guarda a pergunta do user e atualiza o timestamp do Chat usando uma transação de DB
-        DB::transaction(function () use ($chat, $chatId, $texto) {
-            $chat->touch(); // Move o chat para o topo da lista
+        $userMessage = DB::transaction(function () use ($chat, $chatId, $texto) {
+            $chat->touch();
+
             return Message::create([
                 'chat_id' => $chatId,
                 'role' => 'user',
-                // O frontend Vue DEVE usar bibliotecas como DOMPurify ou v-text/v-html com MarkDown seguro
-                // para renderizar isto e evitar Stored XSS. O backend guarda raw por design no RAG.
                 'content' => $texto,
             ]);
         });
 
-        // Vamos buscar o id da última mensagem acabada de criar para passar ao RAG
-        $userMessageId = Message::where('chat_id', $chatId)->orderByDesc('id')->first()->id;
+        $userMessageId = (int) $userMessage->id;
 
         return response()->stream(function () use (
             $urlPython,
@@ -178,10 +284,16 @@ class ChatController extends Controller
             $imagemMime,
             $userMessageId
         ) {
-            // Limpeza de buffer mais segura
             while (ob_get_level() > 0) {
                 ob_end_clean();
             }
+
+            echo 'data: ' . json_encode([
+                'chat_id' => $chatId,
+            ], JSON_UNESCAPED_UNICODE) . "\n\n";
+
+            @ob_flush();
+            flush();
 
             $postFields = [
                 'texto' => $texto,
@@ -198,7 +310,6 @@ class ChatController extends Controller
 
             $buffer = '';
             $fullAiText = '';
-            $doneSent = false;
             $responseCode = 0;
 
             $ch = curl_init($urlPython);
@@ -211,16 +322,11 @@ class ChatController extends Controller
                     'X-Internal-Token: ' . $internalToken,
                 ],
                 CURLOPT_RETURNTRANSFER => false,
-
-                // PROTEÇÃO CRÍTICA: Não seguir redirects. Previne Token Leak!
                 CURLOPT_FOLLOWLOCATION => false,
-
                 CURLOPT_CONNECTTIMEOUT => 10,
-
-                // Redução de timeout para não saturar os workers do PHP FPM
                 CURLOPT_TIMEOUT => 60,
 
-                CURLOPT_WRITEFUNCTION => function ($curl, $chunk) use (&$buffer, &$fullAiText, &$doneSent) {
+                CURLOPT_WRITEFUNCTION => function ($curl, $chunk) use (&$buffer, &$fullAiText) {
                     if (connection_aborted()) {
                         return 0;
                     }
@@ -232,6 +338,7 @@ class ChatController extends Controller
                         $buffer = substr($buffer, $pos + 1);
 
                         $trimmed = rtrim($line, "\r\n");
+
                         if ($trimmed === '' || !str_starts_with($trimmed, 'data: ')) {
                             continue;
                         }
@@ -239,16 +346,12 @@ class ChatController extends Controller
                         $payload = substr($trimmed, 6);
 
                         if ($payload === '[DONE]') {
-                            echo "data: [DONE]\n\n";
-                            @ob_flush();
-                            flush();
-                            $doneSent = true;
                             continue;
                         }
 
                         $decoded = json_decode($payload, true);
+
                         if (is_array($decoded) && isset($decoded['chunk'])) {
-                            // Cuidado com crescimento infinito de string. Max de 20k caracteres por segurança.
                             if (strlen($fullAiText) < 20000) {
                                 $fullAiText .= $decoded['chunk'];
                             }
@@ -266,10 +369,29 @@ class ChatController extends Controller
             $ok = curl_exec($ch);
             $responseCode = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
             $curlError = curl_error($ch);
+
             curl_close($ch);
 
-            if (!$doneSent && !connection_aborted()) {
-                if ($ok === false || $responseCode >= 400) {
+            $falhouServicoIa = $ok === false || $responseCode >= 400;
+
+            if (
+                !$falhouServicoIa &&
+                !empty(trim($fullAiText)) &&
+                !$this->looksLikeTechnicalError($fullAiText)
+            ) {
+                DB::transaction(function () use ($chat, $chatId, $fullAiText) {
+                    Message::create([
+                        'chat_id' => $chatId,
+                        'role' => 'ai',
+                        'content' => $fullAiText,
+                    ]);
+
+                    $chat->touch();
+                });
+            }
+
+            if (!connection_aborted()) {
+                if ($falhouServicoIa) {
                     $msg = $responseCode === 401 || $responseCode === 403
                         ? "\n\n❌ Falha de autenticação interna com o serviço de IA."
                         : "\n\n❌ Falha ao comunicar com o serviço de IA.";
@@ -278,29 +400,19 @@ class ChatController extends Controller
                         $msg = "\n\n❌ Falha ao comunicar com o serviço de IA.";
                     }
 
-                    echo 'data: ' . json_encode(['chunk' => $msg], JSON_UNESCAPED_UNICODE) . "\n\n";
+                    echo 'data: ' . json_encode([
+                        'chunk' => $msg,
+                    ], JSON_UNESCAPED_UNICODE) . "\n\n";
                 }
 
                 echo "data: [DONE]\n\n";
                 @ob_flush();
                 flush();
             }
-
-            // Apenas guarda a resposta na DB se não for um erro técnico
-            if (!empty(trim($fullAiText)) && !$this->looksLikeTechnicalError($fullAiText)) {
-                DB::transaction(function () use ($chat, $chatId, $fullAiText) {
-                    Message::create([
-                        'chat_id' => $chatId,
-                        'role' => 'ai',
-                        'content' => $fullAiText,
-                    ]);
-                    $chat->touch(); // Move para o topo da lista novamente (Última atividade)
-                });
-            }
         }, 200, [
             'Content-Type' => 'text/event-stream',
             'Cache-Control' => 'no-cache',
-            'X-Accel-Buffering' => 'no', // Essencial para NGINX não bloquear o stream
+            'X-Accel-Buffering' => 'no',
         ]);
     }
 
@@ -308,7 +420,8 @@ class ChatController extends Controller
     {
         $userId = $this->requireAuthenticatedUserId();
 
-        $chat = Chat::where('id', $chat_id)
+        $chat = Chat::with(['subject', 'studySpace', 'spaceFolder'])
+            ->where('id', $chat_id)
             ->where('user_id', $userId)
             ->firstOrFail();
 
@@ -320,6 +433,13 @@ class ChatController extends Controller
             'status' => 'sucesso',
             'chat_id' => $chat->id,
             'titulo' => $chat->title,
+            'context_type' => $chat->context_type ?? 'uc',
+            'subject_id' => $chat->subject_id,
+            'subject_name' => $chat->subject?->name,
+            'space_id' => $chat->study_space_id,
+            'space_name' => $chat->studySpace?->name,
+            'folder_id' => $chat->space_folder_id,
+            'folder_name' => $chat->spaceFolder?->name,
             'mensagens' => $mensagens,
         ]);
     }
@@ -329,10 +449,23 @@ class ChatController extends Controller
         $userId = $this->requireAuthenticatedUserId();
         $userName = Auth::user()?->name ?? 'Utilizador';
 
-        $chats = Chat::where('user_id', $userId)
+        $chats = Chat::query()
+            ->where('chats.user_id', $userId)
             ->leftJoin('subjects', 'chats.subject_id', '=', 'subjects.id')
-            ->select('chats.id as chat_id', 'subjects.name as nome_uc', 'chats.title')
-            // Agora a ordenação por updated_at vai funcionar perfeitamente graças ao $chat->touch()
+            ->leftJoin('study_spaces', 'chats.study_space_id', '=', 'study_spaces.id')
+            ->leftJoin('space_folders', 'chats.space_folder_id', '=', 'space_folders.id')
+            ->select(
+                'chats.id as chat_id',
+                'chats.context_type',
+                'chats.study_space_id as space_id',
+                'chats.space_folder_id as folder_id',
+                'space_folders.name as nome_pasta',
+                'study_spaces.name as nome_espaco',
+                'subjects.id as subject_id',
+                'subjects.name as nome_uc',
+                'chats.title',
+                'chats.updated_at'
+            )
             ->orderBy('chats.updated_at', 'desc')
             ->get();
 
@@ -341,5 +474,20 @@ class ChatController extends Controller
             'aluno' => $userName,
             'chats' => $chats,
         ]);
+    }
+
+    private function formatChat(Chat $chat): array
+    {
+        return [
+            'chat_id' => $chat->id,
+            'title' => $chat->title,
+            'context_type' => $chat->context_type ?? 'uc',
+            'subject_id' => $chat->subject_id,
+            'space_id' => $chat->study_space_id,
+            'folder_id' => $chat->space_folder_id,
+            'is_temporary' => (bool) $chat->is_temporary,
+            'created_at' => $chat->created_at?->toISOString(),
+            'updated_at' => $chat->updated_at?->toISOString(),
+        ];
     }
 }

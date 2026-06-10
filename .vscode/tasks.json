@@ -11,36 +11,37 @@
     {
       "label": "TUTS: Arrancar Tudo",
       "dependsOn": [
-        "0. REDIS (Memória Vetorial)",
-        "1. BACKEND (Laravel Octane)",
-        "2. FRONTEND (Vue.js)",
-        "3. RAG (Python)",
+        "0. REDIS (Redis Stack)",
+        "1. BACKEND (Laravel/Sail)",
+        "2. FRONTEND (Vue/Vite)",
+        "3. RAG (Python/FastAPI)",
         "4. GIT"
       ],
       "dependsOrder": "parallel",
-      "runOptions": {
-        "runOn": "folderOpen"
-      },
+      "problemMatcher": [],
       "icon": {
         "id": "play-circle",
         "color": "terminal.ansiGreen"
       }
     },
     {
-      "label": "0. REDIS (Memória Vetorial)",
+      "label": "0. REDIS (Redis Stack)",
       "type": "shell",
-      "command": "wsl docker start redis-stack",
+      "command": "if docker inspect redis-stack >/dev/null 2>&1; then docker start redis-stack; else echo 'Container redis-stack nao existe. Cria-o primeiro, por exemplo: docker run -d --name redis-stack -p 6379:6379 redis/redis-stack-server:latest'; fi",
       "presentation": {
-        "reveal": "silent",
-        "close": true,
+        "reveal": "always",
+        "close": false,
         "panel": "dedicated"
-      }
+      },
+      "problemMatcher": []
     },
     {
-      "label": "1. BACKEND (Laravel Octane)",
+      "label": "1. BACKEND (Laravel/Sail)",
       "type": "shell",
-      "command": "wsl -d Ubuntu --cd /mnt/c/tuts-workspace/tuts-core bash -c './vendor/bin/sail up'",
-      "isBackground": true,
+      "command": "./vendor/bin/sail up -d",
+      "options": {
+        "cwd": "${workspaceFolder}/tuts-core"
+      },
       "presentation": {
         "group": "tuts-services",
         "panel": "new"
@@ -52,9 +53,12 @@
       "problemMatcher": []
     },
     {
-      "label": "2. FRONTEND (Vue.js)",
+      "label": "2. FRONTEND (Vue/Vite)",
       "type": "shell",
-      "command": "wsl -d Ubuntu --cd /mnt/c/tuts-workspace/tuts-core bash -c 'echo \"A aguardar que o contentor do Laravel acorde...\"; while ! docker exec tuts-core-laravel.test-1 true 2>/dev/null; do sleep 2; done; echo \"Laravel Online! A iniciar Vue.js com auto reload...\"; docker exec -e CHOKIDAR_USEPOLLING=true -e CHOKIDAR_INTERVAL=500 -e WATCHPACK_POLLING=true -it tuts-core-laravel.test-1 npm run dev -- --host 0.0.0.0'",
+      "command": "set -e; echo 'A aguardar pelo Laravel/Sail...'; until container=$(./vendor/bin/sail ps -q laravel.test 2>/dev/null) && [ -n \"$container\" ] && docker inspect -f '{{.State.Running}}' \"$container\" 2>/dev/null | grep -q true; do sleep 2; done; echo 'A limpar Vite/npm/node antigo dentro do container...'; docker exec \"$container\" sh -lc 'pkill -9 -f [v]ite 2>/dev/null || true; pkill -9 -f [n]pm 2>/dev/null || true; pkill -9 -f [n]ode 2>/dev/null || true'; rm -f public/hot; echo 'A iniciar Vue/Vite...'; ./vendor/bin/sail npm run dev -- --host 0.0.0.0",
+      "options": {
+        "cwd": "${workspaceFolder}/tuts-core"
+      },
       "isBackground": true,
       "presentation": {
         "group": "tuts-services",
@@ -67,9 +71,9 @@
       "problemMatcher": []
     },
     {
-      "label": "3. RAG (Python)",
+      "label": "3. RAG (Python/FastAPI)",
       "type": "shell",
-      "command": ".\\venv\\Scripts\\python.exe -m uvicorn main:app --host 0.0.0.0 --port 8001 --env-file .env --reload --reload-dir . --reload-exclude venv --reload-exclude faiss_db --reload-exclude __pycache__ --reload-exclude pdfs",
+      "command": "./venv/bin/python -m uvicorn main:app --host 0.0.0.0 --port 8001 --env-file .env --reload --reload-dir . --reload-exclude venv --reload-exclude faiss_db --reload-exclude __pycache__ --reload-exclude pdfs",
       "options": {
         "cwd": "${workspaceFolder}/tuts-rag-service"
       },
@@ -87,7 +91,7 @@
     {
       "label": "4. GIT",
       "type": "shell",
-      "command": "powershell.exe -NoExit",
+      "command": "bash",
       "options": {
         "cwd": "${workspaceFolder}"
       },
@@ -96,9 +100,10 @@
         "panel": "new"
       },
       "icon": {
-        "id": "terminal-powershell",
+        "id": "terminal-bash",
         "color": "terminal.ansiMagenta"
-      }
+      },
+      "problemMatcher": []
     }
   ]
 }

@@ -15,7 +15,6 @@ class DatabaseSeeder extends Seeder
     {
         $this->command->info('🚜 A importar Cursos e Cadeiras dos teus JSONs...');
 
-        // 1. Ler e importar os Cursos
         $jsonCursos = File::get(database_path('data/cursos_ua.json'));
         $cursos = json_decode($jsonCursos, true);
 
@@ -25,38 +24,53 @@ class DatabaseSeeder extends Seeder
                 ['url' => $cursoData['url_curso']]
             );
         }
+
         $this->command->info('✅ Cursos importados!');
 
-        // 2. Encontrar o ID do curso de MTC
         $cursoMtc = Course::where('name', 'Multimédia e Tecnologias da Comunicação')->first();
 
-        // 3. Ler e importar as Cadeiras de MTC
-        if ($cursoMtc) {
-            $jsonCadeiras = File::get(database_path('data/cadeiras_mtc.json'));
-            $cadeiras = json_decode($jsonCadeiras, true);
-
-            foreach ($cadeiras as $cadeiraData) {
-                // Procura se a cadeira já existe. Se não existir, cria-a na tabela subjects.
-                $subject = Subject::firstOrCreate(
-                    ['name' => $cadeiraData['nome_uc']],
-                    ['url' => $cadeiraData['url_uc']]
-                );
-
-                // Liga a cadeira ao curso MTC na tabela pivot 'course_subject'
-                $cursoMtc->subjects()->syncWithoutDetaching([$subject->id]);
-            }
-            $this->command->info('✅ Cadeiras de MTC ligadas e importadas com sucesso!');
-
-            // 4. A MAGIA FINAL: Criar o Aluno de Teste (ID 1) e matriculá-lo em MTC!
-            User::firstOrCreate(
-                ['email' => 'aluno@ua.pt'],
-                [
-                    'name' => 'Aluno de Teste MTC',
-                    'password' => Hash::make('password123'),
-                    'course_id' => $cursoMtc->id // <-- Associa o aluno ao curso!
-                ]
-            );
-            $this->command->info('👨‍🎓 Aluno de teste matriculado em MTC!');
+        if (!$cursoMtc) {
+            $this->command->warn('⚠️ Curso MTC não encontrado no JSON. Seed das cadeiras MTC ignorado.');
+            return;
         }
+
+        $jsonCadeiras = File::get(database_path('data/cadeiras_mtc.json'));
+        $cadeiras = json_decode($jsonCadeiras, true);
+
+        foreach ($cadeiras as $cadeiraData) {
+            $subject = Subject::firstOrCreate(
+                ['name' => $cadeiraData['nome_uc']],
+                ['url' => $cadeiraData['url_uc']]
+            );
+
+            $cursoMtc->subjects()->syncWithoutDetaching([$subject->id]);
+        }
+
+        $this->command->info('✅ Cadeiras de MTC ligadas e importadas com sucesso!');
+
+        User::updateOrCreate(
+            ['email' => 'aluno@ua.pt'],
+            [
+                'name' => 'Aluno de Teste MTC',
+                'password' => Hash::make('password123'),
+                'course_id' => $cursoMtc->id,
+                'role' => 'aluno',
+                'email_verified_at' => now(),
+            ]
+        );
+
+        User::updateOrCreate(
+            ['email' => 'professor@ua.pt'],
+            [
+                'name' => 'Professor de Teste',
+                'password' => Hash::make('password123'),
+                'course_id' => $cursoMtc->id,
+                'role' => 'professor',
+                'email_verified_at' => now(),
+            ]
+        );
+
+        $this->command->info('👨‍🎓 Aluno de teste: aluno@ua.pt / password123');
+        $this->command->info('👨‍🏫 Professor de teste: professor@ua.pt / password123');
     }
 }

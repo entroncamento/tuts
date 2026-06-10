@@ -10,8 +10,9 @@ from langchain_community.document_loaders import PyMuPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
 
-from config import settings, FAISS_INDEX_FILE, logger
+from config import settings, FAISS_INDEX_FILE, MANIFEST_FILE, logger
 from core.ml_models import embeddings_model, leitor_ocr
+from core.utils import pasta_faiss_canonica_uc
 
 # Limites de Segurança
 MAX_PAGES_PER_PDF = 500
@@ -162,17 +163,17 @@ def build_index(temp_path: str, filename: str, uc: str, chunk_size: int, chunk_o
     )
 
     # 5) Persistência FAISS Segura
-    db_path = os.path.join(settings.base_faiss_dir, uc)
+    db_path = pasta_faiss_canonica_uc(uc)
     os.makedirs(db_path, exist_ok=True)
-    index_path = os.path.join(db_path, FAISS_INDEX_FILE)
+    index_path = db_path / FAISS_INDEX_FILE
 
-    _validar_faiss_dir(db_path)
+    _validar_faiss_dir(str(db_path))
 
-    if os.path.exists(index_path):
+    if index_path.exists():
         logger.info("[BUILD_INDEX][%s] Índice FAISS existente detetado. A carregar...", clean_filename)
 
         vs = FAISS.load_local(
-            db_path,
+            str(db_path),
             embeddings_model,
             allow_dangerous_deserialization=True, # Mantemos por dependência técnica do LangChain, mas mitigado pelo _validar_faiss_dir()
         )
@@ -188,7 +189,7 @@ def build_index(temp_path: str, filename: str, uc: str, chunk_size: int, chunk_o
     vs.save_local(temp_db_path)
 
     # Versionamento simplificado: em vez de renomear a pasta inteira, movemos o ficheiro de index
-    if os.path.exists(db_path):
+    if db_path.exists():
         # Aqui, idealmente, num sistema mais complexo guardar-se-ia a versão antiga
         shutil.copytree(temp_db_path, db_path, dirs_exist_ok=True)
         shutil.rmtree(temp_db_path)
@@ -206,8 +207,8 @@ def build_index(temp_path: str, filename: str, uc: str, chunk_size: int, chunk_o
         "chunks": len(chunks)
     }
 
-    manifest_path = os.path.join(db_path, "manifest.json")
-    with open(manifest_path, "w", encoding="utf-8") as f:
+    manifest_path = db_path / MANIFEST_FILE
+    with manifest_path.open("w", encoding="utf-8") as f:
         json.dump(manifest, f, ensure_ascii=False, indent=2)
 
     logger.info(

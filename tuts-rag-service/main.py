@@ -18,7 +18,7 @@ async def verificar_token_interno(x_internal_token: str = Header(None)):
     """
     Garante que o pedido vem do Laravel ou de um cliente autorizado.
     """
-    if not x_internal_token or x_internal_token != settings.internal_api_token:
+    if not x_internal_token or x_internal_token != settings.internal_token:
         raise HTTPException(status_code=403, detail="Acesso não autorizado.")
     return True
 

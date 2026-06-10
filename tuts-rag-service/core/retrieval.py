@@ -1,4 +1,3 @@
-import os
 import time
 import asyncio
 from pathlib import Path
@@ -9,7 +8,7 @@ from langchain_community.retrievers import BM25Retriever
 from config import settings, FAISS_INDEX_FILE, logger
 from core.cache import faiss_cache, bm25_cache, docs_cache, _cache_locks
 from core.ml_models import embeddings_model, executor, reranker
-from core.utils import limpar_nome_uc
+from core.utils import limpar_nome_uc, resolver_pasta_faiss_uc
 
 # Limite máximo de contexto injetado no prompt para prevenir DoS/Custos (aprox. 3000 tokens)
 MAX_CONTEXTO_CHARS = 12_000 
@@ -35,19 +34,19 @@ async def get_vector_store(uc: str) -> FAISS | None:
 
     async with _cache_locks[uc_segura]:
         if uc_segura not in faiss_cache:
-            db_path = os.path.join(settings.base_faiss_dir, uc_segura)
-            index_path = os.path.join(db_path, FAISS_INDEX_FILE)
+            db_path = resolver_pasta_faiss_uc(uc_segura)
+            index_path = db_path / FAISS_INDEX_FILE
             
-            _validar_faiss_dir_leitura(db_path)
+            _validar_faiss_dir_leitura(str(db_path))
 
-            if os.path.exists(index_path):
+            if index_path.exists():
                 loop = asyncio.get_running_loop()
                 # O allow_dangerous_deserialization=True é mitigado pela verificação
                 # do Path e pelas permissões estritas do servidor de ficheiros.
                 faiss_cache[uc_segura] = await loop.run_in_executor(
                     executor,
                     lambda: FAISS.load_local(
-                        db_path,
+                        str(db_path),
                         embeddings_model,
                         allow_dangerous_deserialization=True,
                     ),

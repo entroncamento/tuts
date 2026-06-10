@@ -1,0 +1,198 @@
+[
+  {
+    "id": 1,
+    "categoria": "definicao",
+    "pergunta": "O que é a Temporal Dead Zone (TDZ) em JavaScript?",
+    "contexto_esperado": "A Temporal Dead Zone (TDZ) surge com a introdução de let e const. Quando estas variáveis são declaradas, sofrem hoisting e são levadas para o topo do scope, mas ao contrário do var, não são inicializadas com undefined. Em vez disso, entram no estado de Temporal Dead Zone — um estado de não inicialização. Variáveis com var são inicializadas com undefined durante o hoisting e aguardam a atribuição de valor. Variáveis com let e const ficam na TDZ até lhes ser atribuído um valor; qualquer acesso antes dessa inicialização lança um erro de referência.",
+    "must_include": [
+      "TDZ aplica-se a let e const",
+      "let e const sofrem hoisting mas não são inicializadas com undefined",
+      "var é inicializada com undefined durante o hoisting",
+      "aceder a let ou const antes da inicialização causa erro de referência"
+    ],
+    "must_not_include": [
+      "let x; console.log(x); // undefined como exemplo de acesso antes da declaração",
+      "TDZ significa que let e const não sofrem hoisting",
+      "const pode ser alterada depois de inicializada"
+    ],
+    "expected_sources": ["Temporal Dead Zone - TDZ, p. 10"],
+    "evaluation_notes": "O juiz deve distinguir declaração sem inicialização de acesso antes da declaração. Não deve aceitar exemplos que chamem TDZ a um let já declarado."
+  },
+  {
+    "id": 2,
+    "categoria": "procedimento",
+    "pergunta": "Como é que passamos dados de um componente filho para um componente pai em React?",
+    "contexto_esperado": "Em React, o fluxo de dados padrão é de pai para filho via props. Para passar dados no sentido inverso (filho → pai), usa-se o padrão Inverse Dataflow com Callback Handlers: o componente pai define uma função handler, passa-a como prop ao filho, e o filho invoca essa função passando os dados como argumento. Por exemplo, o pai cria handleSearch e passa-a como prop onSearch ao filho SearchBar. Quando o utilizador interage com o filho, este chama onSearch com o valor, e o pai recebe e processa os dados.",
+    "must_include": [
+      "fluxo padrão de props é de pai para filho",
+      "para filho para pai usa-se callback handler",
+      "o pai define a função",
+      "o pai passa a função ao filho como prop",
+      "o filho chama a função passando os dados como argumento"
+    ],
+    "must_not_include": [
+      "o filho altera diretamente o estado do pai",
+      "props são mutadas diretamente no filho"
+    ],
+    "expected_sources": ["Inverse Dataflow e Callback Handlers, p. 65"],
+    "evaluation_notes": "A resposta deve privilegiar o padrão de inverse dataflow e não sugerir mutação direta de props."
+  },
+  {
+    "id": 3,
+    "categoria": "conceptual",
+    "pergunta": "Qual a diferença entre o Rest e o Spread operator em JavaScript?",
+    "contexto_esperado": "Rest e Spread usam a mesma sintaxe (...), mas em contextos opostos. O Spread operator expande um iterável, array ou objeto, nos seus elementos individuais — útil para copiar arrays, juntar arrays, ou passar elementos como argumentos de uma função. O Rest operator agrupa vários argumentos numa única variável array — usado na definição de funções para aceitar um número variável de argumentos. Em resumo: Spread espalha elementos, Rest recolhe-os.",
+    "must_include": [
+      "Rest e Spread usam a sintaxe ...",
+      "Rest agrupa vários argumentos num array",
+      "Rest é usado em parâmetros de funções",
+      "Spread espalha ou expande elementos de arrays ou objetos",
+      "Spread pode ser usado para juntar/copiar arrays ou passar argumentos"
+    ],
+    "must_not_include": [
+      "Rest e Spread são exatamente a mesma coisa",
+      "pode haver mais do que um rest parameter na mesma função",
+      "o rest parameter pode aparecer antes de outros parâmetros"
+    ],
+    "expected_sources": ["Rest e Spread Operators, pp. 22-24"],
+    "evaluation_notes": "Avaliar se a resposta explica a diferença pelo contexto de uso, não apenas pela sintaxe."
+  },
+  {
+    "id": 4,
+    "categoria": "definicao",
+    "pergunta": "O que faz o método filter() num array e como se usa em React?",
+    "contexto_esperado": "O método filter() de Array cria um novo array com todos os elementos que passam num teste definido por uma função de callback. Em React, é amplamente usado para filtrar listas de dados com base em estado. Por exemplo, para implementar uma barra de pesquisa, pode-se fazer: const filteredComments = allComments.filter(item => item.comment.toLowerCase().includes(searchTerm.toLowerCase())); e usar filteredComments no return do componente em vez do array original.",
+    "must_include": [
+      "filter cria um novo array com elementos que passam num teste",
+      "usa uma função de callback",
+      "em React pode filtrar listas com base no estado",
+      "pode ser usado para pesquisa ou filtragem de comentários/listas"
+    ],
+    "must_not_include": [
+      "filter modifica sempre o array original",
+      "filter serve para transformar todos os elementos como map"
+    ],
+    "expected_sources": ["array.prototype.filter(), p. 16", "React State, p. 63"],
+    "evaluation_notes": "O exemplo deve ser coerente: se converte o texto pesquisado para lowercase, deve idealmente converter também o campo comparado."
+  },
+  {
+    "id": 5,
+    "categoria": "procedimento",
+    "pergunta": "Como lidamos com o ciclo de vida (Lifecycle) em componentes funcionais com useEffect?",
+    "contexto_esperado": "Em componentes funcionais, o ciclo de vida é gerido pelo hook useEffect. O useEffect aceita uma função com o código do efeito e, opcionalmente, um array de dependências. Sem array de dependências, corre após cada render. Com array vazio [], corre apenas na montagem, de forma semelhante a componentDidMount. Com dependências [count], corre quando essas variáveis mudam, de forma semelhante a componentDidUpdate. O return dentro do useEffect é a função de limpeza, chamada no unmounting ou antes de o efeito re-executar, de forma semelhante a componentWillUnmount.",
+    "must_include": [
+      "useEffect gere efeitos/ciclo de vida em componentes funcionais",
+      "sem array de dependências corre após cada render",
+      "com array vazio corre apenas na montagem",
+      "com dependências corre quando essas dependências mudam",
+      "return dentro do useEffect é função de limpeza"
+    ],
+    "must_not_include": [
+      "useEffect só corre uma vez por defeito",
+      "o array de dependências é obrigatório",
+      "a função de limpeza corre antes da primeira renderização"
+    ],
+    "expected_sources": ["Component Lifecycle, p. 85"],
+    "evaluation_notes": "A resposta deve explicar as diferenças entre sem dependências, [] e [variável]."
+  },
+  {
+    "id": 6,
+    "categoria": "conceptual",
+    "pergunta": "Qual a diferença entre var, let e const em termos de scope em JavaScript?",
+    "contexto_esperado": "var tem function scope ou global scope: uma variável var declarada dentro de um bloco if é visível fora desse bloco. let tem block scope: só é visível dentro do bloco {} onde foi declarada. const também tem block scope como o let, mas é imutável — uma vez atribuído um valor, não pode ser alterado. Uma variável global, declarada fora de qualquer estrutura, pode ser usada em qualquer ponto do script. Uma variável local, em function scope ou block scope, existe apenas dentro da estrutura onde foi declarada.",
+    "must_include": [
+      "var tem function scope ou global scope",
+      "var declarada num bloco if pode ser visível fora desse bloco",
+      "let tem block scope",
+      "const tem block scope",
+      "const não pode ser reatribuída depois de inicializada"
+    ],
+    "must_not_include": [
+      "uma variável var declarada dentro de uma função é acessível fora dessa função",
+      "console.log de let fora do bloco devolve undefined",
+      "let e const têm function scope como var"
+    ],
+    "expected_sources": ["Variáveis e Scope, pp. 6-8"],
+    "evaluation_notes": "Penalizar exemplos que confundam function scope com block scope ou que digam que let fora do bloco devolve undefined."
+  },
+  {
+    "id": 7,
+    "categoria": "procedimento",
+    "pergunta": "O que é o useState em React e como funciona a atualização de estado?",
+    "contexto_esperado": "useState é um hook do React que permite adicionar estado a componentes funcionais. Retorna um array com dois elementos: o valor atual do estado e uma função setter para o atualizar. Exemplo: const [count, setCount] = useState(0); — count é o estado inicial/atual e setCount é a função que o atualiza. Quando a função setter é chamada, o React faz re-render do componente com o novo valor de estado. O estado não deve ser mutado diretamente — deve sempre ser atualizado através do setter. Para arrays e objetos, é comum usar o spread operator para criar uma nova referência: setItems([...items, novoItem]).",
+    "must_include": [
+      "useState adiciona estado a componentes funcionais",
+      "useState retorna valor atual e função setter",
+      "a função setter atualiza o estado",
+      "mudança de estado provoca re-render",
+      "não se deve mutar o estado diretamente"
+    ],
+    "must_not_include": [
+      "alterar diretamente a variável de estado é a forma recomendada",
+      "useState só funciona em componentes de classe"
+    ],
+    "expected_sources": ["React State (ou Estados), p. 63"],
+    "evaluation_notes": "Avaliar se a resposta explica valor atual + setter e ligação a re-renderização."
+  },
+  {
+    "id": 8,
+    "categoria": "conceptual",
+    "pergunta": "O que são Promises em JavaScript e como se encadeiam com .then() e .catch()?",
+    "contexto_esperado": "Uma Promise é um objeto que representa a eventual conclusão ou falha de uma operação assíncrona. Tem três estados: pending ou pendente, fulfilled/resolvida com sucesso, e rejected/rejeitada com erro. O método .then() recebe uma callback executada quando a Promise é fulfilled, permitindo encadear operações assíncronas. O método .catch() captura erros, sendo executado quando a Promise é rejected. O .finally() corre independentemente do resultado. Este padrão é frequentemente usado com fetch() para fazer pedidos a APIs: fetch(url).then(res => res.json()).then(data => ...).catch(err => ...).",
+    "must_include": [
+      "Promise representa conclusão ou falha de operação assíncrona",
+      "tem estados pending, fulfilled e rejected",
+      ".then trata sucesso e permite encadeamento",
+      ".catch trata erros/rejeições",
+      ".finally corre independentemente do resultado"
+    ],
+    "must_not_include": [
+      ".catch corre quando a Promise é fulfilled",
+      ".then é usado apenas para erros",
+      "Promises são síncronas por definição"
+    ],
+    "expected_sources": ["Promises, p. 43", "Fetch - como fazer pedidos a APIs, p. 44"],
+    "evaluation_notes": "A resposta pode usar fetch como exemplo, mas não deve transformar a pergunta num tutorial de APIs."
+  },
+  {
+    "id": 9,
+    "categoria": "debug",
+    "pergunta": "Porque é que o useEffect dispara em loop infinito e como se corrige?",
+    "contexto_esperado": "O useEffect dispara em loop infinito quando o array de dependências contém um valor que é recriado a cada render, ou quando dentro do efeito se atualiza um estado que está listado nas dependências — o que causa um novo render, que re-executa o efeito, criando um ciclo infinito. Por exemplo, se dentro de useEffect se fizer setCount(count + 1) e count estiver nas dependências, o efeito entrará em loop. A solução passa por usar o array de dependências corretamente: [] para correr apenas na montagem, ou listar apenas as dependências que realmente devem disparar o efeito. Também se pode usar a forma funcional do setter: setCount(prev => prev + 1) para evitar dependência do valor atual quando adequado.",
+    "must_include": [
+      "loop ocorre quando o efeito atualiza estado que está nas dependências",
+      "atualizar estado causa re-render",
+      "o re-render pode voltar a executar o efeito",
+      "corrige-se ajustando corretamente o array de dependências",
+      "pode usar setter funcional quando adequado"
+    ],
+    "must_not_include": [
+      "remover sempre todas as dependências é a solução correta",
+      "useEffect nunca deve ter dependências",
+      "useCallback resolve todos os loops de useEffect sozinho"
+    ],
+    "expected_sources": ["Component Lifecycle, p. 85"],
+    "evaluation_notes": "Penalizar soluções simplistas que digam apenas para meter [] sem explicar consequências."
+  },
+  {
+    "id": 10,
+    "categoria": "fora_scope",
+    "pergunta": "Como faço o deploy de uma aplicação React na Vercel com um domínio personalizado?",
+    "contexto_esperado": "Esta pergunta está fora do âmbito da UC de TACS. O conteúdo da sebenta e materiais de suporte cobrem JavaScript ES6+ e React, incluindo componentes, props, estado, lifecycle e hooks, mas não aborda deployment, infraestrutura cloud, DNS ou serviços de hosting como Vercel, Netlify ou AWS Amplify.",
+    "must_include": [
+      "deve indicar que a informação não está nos materiais da UC",
+      "deve recusar dar instruções específicas de deploy",
+      "deve redirecionar para conteúdos cobertos pela UC como JavaScript, React, componentes, props, estado, hooks ou lifecycle"
+    ],
+    "must_not_include": [
+      "npm run build",
+      "vercel --prod",
+      "configurar CNAME",
+      "configurar DNS",
+      "passo 1",
+      "tutorial de deploy"
+    ],
+    "expected_sources": ["Índice da sebenta: JS e React; sem deployment"],
+    "evaluation_notes": "Este item testa recusa controlada. Se a resposta der passos técnicos de Vercel ou DNS, a recusa deve ser 0."
+  }
+]
