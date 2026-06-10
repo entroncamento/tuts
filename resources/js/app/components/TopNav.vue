@@ -47,7 +47,10 @@ const avatar = computed(() => {
         initials: initials.toUpperCase(),
         name: name.toUpperCase(),
         subtitle: roleStore.role === "teacher" ? "Docente" : "Estudante",
-        avatarBg: roleStore.role === "teacher" ? "#1E3A8A" : "#009957",
+        avatarBg:
+            roleStore.role === "teacher"
+                ? "var(--color-info)"
+                : "var(--color-primary)",
         fontSize: initials.length > 1 ? 13 : 16,
     };
 });
@@ -200,8 +203,8 @@ onMounted(() => {
         style="
             left: 80px;
             height: 72px;
-            background: #ffffff;
-            border-bottom: 1px solid #f0f0f0;
+            background: var(--color-surface);
+            border-bottom: 1px solid var(--color-border-soft);
             padding-left: 24px;
             padding-right: 24px;
         "
@@ -212,7 +215,7 @@ onMounted(() => {
                     font-family: Inter, sans-serif;
                     font-weight: 500;
                     font-size: 13px;
-                    color: #bdbaba;
+                    color: var(--color-text-soft);
                 "
             >
                 {{ breadcrumb }}
@@ -224,8 +227,8 @@ onMounted(() => {
                     font-family: Inter, sans-serif;
                     font-weight: 600;
                     font-size: 10px;
-                    color: #1e3a8a;
-                    background: rgba(30, 58, 138, 0.1);
+                    color: var(--color-info);
+                    background: var(--color-info-soft);
                     border-radius: 4px;
                     padding: 2px 7px;
                     letter-spacing: 0.04em;
@@ -242,7 +245,7 @@ onMounted(() => {
                     font-family: Inter, sans-serif;
                     font-weight: 700;
                     font-size: 20px;
-                    color: #009957;
+                    color: var(--color-primary);
                     letter-spacing: 0.08em;
                 "
             >
@@ -261,17 +264,17 @@ onMounted(() => {
                     padding: 4px;
                 "
             >
-                <Search :size="18" :stroke-width="1.8" color="#1E1E1E" />
+                <Search :size="18" :stroke-width="1.8" color="var(--color-text)" />
             </button>
 
             <div class="flex items-center gap-2">
-                <Info :size="14" :stroke-width="1.8" color="#1E1E1E" />
+                <Info :size="14" :stroke-width="1.8" color="var(--color-text)" />
                 <span
                     style="
                         font-family: Inter, sans-serif;
                         font-weight: 500;
                         font-size: 12px;
-                        color: #1e1e1e;
+                        color: var(--color-text);
                         letter-spacing: 0.02em;
                     "
                 >
@@ -282,7 +285,7 @@ onMounted(() => {
                         width: 40px;
                         height: 22px;
                         border-radius: 11px;
-                        background: #009957;
+                        background: var(--color-primary);
                         display: inline-flex;
                         align-items: center;
                         justify-content: flex-end;
@@ -294,8 +297,8 @@ onMounted(() => {
                             width: 16px;
                             height: 16px;
                             border-radius: 50%;
-                            background: #ffffff;
-                            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+                            background: var(--color-primary-contrast);
+                            box-shadow: 0 1px 3px var(--color-border-strong);
                         "
                     />
                 </span>
@@ -312,9 +315,9 @@ onMounted(() => {
                         padding: 4px;
                         position: relative;
                     "
-                    @click="toggleNotifications"
+                        @click="toggleNotifications"
                 >
-                    <Bell :size="20" :stroke-width="1.8" color="#1E1E1E" />
+                    <Bell :size="20" :stroke-width="1.8" color="var(--color-text)" />
 
                     <span
                         v-if="unreadCount > 0"
@@ -325,9 +328,9 @@ onMounted(() => {
                             min-width: 18px;
                             height: 18px;
                             border-radius: 999px;
-                            background: #009957;
-                            border: 2px solid #ffffff;
-                            color: #ffffff;
+                            background: var(--color-primary);
+                            border: 2px solid var(--color-surface);
+                            color: var(--color-primary-contrast);
                             font-family: Inter, sans-serif;
                             font-size: 10px;
                             font-weight: 800;
@@ -354,10 +357,10 @@ onMounted(() => {
                         top: 34px;
                         right: 0;
                         width: 350px;
-                        background: #ffffff;
-                        border: 1px solid #e5e5e5;
+                        background: var(--color-surface);
+                        border: 1px solid var(--color-border);
                         border-radius: 16px;
-                        box-shadow: 0 16px 50px rgba(0, 0, 0, 0.14);
+                        box-shadow: var(--shadow-card);
                         z-index: 60;
                         overflow: hidden;
                     "
@@ -369,7 +372,7 @@ onMounted(() => {
                             align-items: center;
                             justify-content: space-between;
                             padding: 14px 16px;
-                            border-bottom: 1px solid #f0f0f0;
+                            border-bottom: 1px solid var(--color-border-soft);
                         "
                     >
                         <div
@@ -384,7 +387,7 @@ onMounted(() => {
                                     font-family: Inter, sans-serif;
                                     font-weight: 800;
                                     font-size: 14px;
-                                    color: #1e1e1e;
+                                    color: var(--color-text);
                                 "
                             >
                                 Notificações
@@ -394,7 +397,7 @@ onMounted(() => {
                                     font-family: Inter, sans-serif;
                                     font-weight: 400;
                                     font-size: 11px;
-                                    color: #9e9e9e;
+                                    color: var(--color-text-soft);
                                 "
                             >
                                 {{ unreadCount }} por ler
@@ -410,7 +413,7 @@ onMounted(() => {
                                 font-family: Inter, sans-serif;
                                 font-size: 11px;
                                 font-weight: 700;
-                                color: #009957;
+                                color: var(--color-primary);
                             "
                             @click="markAllNotificationsAsRead"
                         >
@@ -424,7 +427,7 @@ onMounted(() => {
                             padding: 18px;
                             font-family: Inter, sans-serif;
                             font-size: 13px;
-                            color: #656966;
+                            color: var(--color-text-muted);
                         "
                     >
                         A carregar...
@@ -436,7 +439,7 @@ onMounted(() => {
                             padding: 20px;
                             font-family: Inter, sans-serif;
                             font-size: 13px;
-                            color: #656966;
+                            color: var(--color-text-muted);
                         "
                     >
                         Sem notificações por agora.
@@ -449,8 +452,8 @@ onMounted(() => {
                             style="
                                 width: 100%;
                                 border: none;
-                                border-bottom: 1px solid #f4f4f4;
-                                background: #ffffff;
+                                border-bottom: 1px solid var(--color-border-soft);
+                                background: var(--color-surface);
                                 cursor: pointer;
                                 text-align: left;
                                 padding: 13px 16px;
@@ -467,8 +470,8 @@ onMounted(() => {
                                     marginTop: '6px',
                                     flexShrink: 0,
                                     background: notification.is_read
-                                        ? '#D9D9D9'
-                                        : '#009957',
+                                        ? 'var(--color-border-strong)'
+                                        : 'var(--color-primary)',
                                 }"
                             />
 
@@ -493,7 +496,7 @@ onMounted(() => {
                                             font-family: Inter, sans-serif;
                                             font-weight: 800;
                                             font-size: 13px;
-                                            color: #1e1e1e;
+                                            color: var(--color-text);
                                             line-height: 1.3;
                                         "
                                     >
@@ -506,7 +509,7 @@ onMounted(() => {
                                             font-family: Inter, sans-serif;
                                             font-weight: 400;
                                             font-size: 10px;
-                                            color: #bdbaba;
+                                            color: var(--color-text-soft);
                                             white-space: nowrap;
                                         "
                                     >
@@ -522,7 +525,7 @@ onMounted(() => {
                                         font-family: Inter, sans-serif;
                                         font-weight: 400;
                                         font-size: 12px;
-                                        color: #656966;
+                                        color: var(--color-text-muted);
                                         line-height: 1.35;
                                     "
                                 >
@@ -535,7 +538,7 @@ onMounted(() => {
                                         font-family: Inter, sans-serif;
                                         font-weight: 700;
                                         font-size: 10px;
-                                        color: #009957;
+                                        color: var(--color-primary);
                                         letter-spacing: 0.04em;
                                         text-transform: uppercase;
                                         margin-top: 2px;
@@ -549,7 +552,7 @@ onMounted(() => {
                 </div>
             </div>
 
-            <div style="width: 1px; height: 28px; background: #e5e5e5" />
+            <div style="width: 1px; height: 28px; background: var(--color-border)" />
 
             <div
                 class="flex items-center gap-3 rounded-lg"
@@ -568,7 +571,7 @@ onMounted(() => {
                             fontFamily: 'Inter, sans-serif',
                             fontWeight: 700,
                             fontSize: `${avatar.fontSize}px`,
-                            color: '#ffffff',
+                            color: 'var(--color-primary-contrast)',
                         }"
                     >
                         {{ avatar.initials }}
@@ -581,7 +584,7 @@ onMounted(() => {
                             font-family: Inter, sans-serif;
                             font-weight: 700;
                             font-size: 12px;
-                            color: #1e1e1e;
+                            color: var(--color-text);
                             line-height: 1.2;
                         "
                     >
@@ -592,7 +595,7 @@ onMounted(() => {
                             font-family: Inter, sans-serif;
                             font-weight: 400;
                             font-size: 11px;
-                            color: #9e9e9e;
+                            color: var(--color-text-soft);
                         "
                     >
                         {{ avatar.subtitle }}

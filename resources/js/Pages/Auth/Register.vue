@@ -36,9 +36,9 @@ const submit = () => {
                             type="radio"
                             v-model="form.role"
                             value="aluno"
-                            class="rounded-full border-gray-300 text-green-600 shadow-sm focus:ring-green-500"
+                            class="rounded-full border-[var(--color-border)] text-[var(--color-primary)] shadow-sm focus:ring-[var(--ring-focus)]"
                         />
-                        <span class="ml-2 text-sm text-gray-700"
+                        <span class="ml-2 text-sm text-[var(--color-text-muted)]"
                             >Aluno (@ua.pt)</span
                         >
                     </label>
@@ -47,9 +47,9 @@ const submit = () => {
                             type="radio"
                             v-model="form.role"
                             value="professor"
-                            class="rounded-full border-gray-300 text-green-600 shadow-sm focus:ring-green-500"
+                            class="rounded-full border-[var(--color-border)] text-[var(--color-primary)] shadow-sm focus:ring-[var(--ring-focus)]"
                         />
-                        <span class="ml-2 text-sm text-gray-700"
+                        <span class="ml-2 text-sm text-[var(--color-text-muted)]"
                             >Professor / Regente</span
                         >
                     </label>
@@ -61,7 +61,7 @@ const submit = () => {
                 <TextInput
                     id="name"
                     type="text"
-                    class="mt-1 block w-full border-gray-300 focus:border-green-500 focus:ring-green-500 rounded-md shadow-sm"
+                    class="app-input mt-1 block w-full rounded-md shadow-sm focus:border-[var(--color-primary)] focus:ring-[var(--ring-focus)]"
                     v-model="form.name"
                     required
                     autofocus
@@ -75,7 +75,7 @@ const submit = () => {
                 <TextInput
                     id="email"
                     type="email"
-                    class="mt-1 block w-full border-gray-300 focus:border-green-500 focus:ring-green-500 rounded-md shadow-sm"
+                    class="app-input mt-1 block w-full rounded-md shadow-sm focus:border-[var(--color-primary)] focus:ring-[var(--ring-focus)]"
                     v-model="form.email"
                     required
                     autocomplete="username"
@@ -86,17 +86,17 @@ const submit = () => {
 
             <div
                 v-if="form.role === 'professor'"
-                class="mt-4 p-4 bg-green-50 border border-green-200 rounded-md"
+                class="mt-4 rounded-md border border-[var(--color-success)] bg-[var(--color-success-soft)] p-4"
             >
                 <InputLabel
                     for="professor_key"
                     value="Chave de Acesso (Enviada por Email)"
-                    class="text-green-800 font-semibold"
+                    class="font-semibold text-[var(--color-success)]"
                 />
                 <TextInput
                     id="professor_key"
                     type="text"
-                    class="mt-1 block w-full border-green-300 focus:border-green-500 focus:ring-green-500 rounded-md shadow-sm"
+                    class="app-input mt-1 block w-full rounded-md shadow-sm focus:border-[var(--color-primary)] focus:ring-[var(--ring-focus)]"
                     v-model="form.professor_key"
                     :required="form.role === 'professor'"
                     placeholder="Insira o código de regente..."
@@ -109,7 +109,7 @@ const submit = () => {
                 <TextInput
                     id="password"
                     type="password"
-                    class="mt-1 block w-full border-gray-300 focus:border-green-500 focus:ring-green-500 rounded-md shadow-sm"
+                    class="app-input mt-1 block w-full rounded-md shadow-sm focus:border-[var(--color-primary)] focus:ring-[var(--ring-focus)]"
                     v-model="form.password"
                     required
                     autocomplete="new-password"
@@ -125,7 +125,7 @@ const submit = () => {
                 <TextInput
                     id="password_confirmation"
                     type="password"
-                    class="mt-1 block w-full border-gray-300 focus:border-green-500 focus:ring-green-500 rounded-md shadow-sm"
+                    class="app-input mt-1 block w-full rounded-md shadow-sm focus:border-[var(--color-primary)] focus:ring-[var(--ring-focus)]"
                     v-model="form.password_confirmation"
                     required
                     autocomplete="new-password"
@@ -139,13 +139,13 @@ const submit = () => {
             <div class="mt-6 flex items-center justify-between">
                 <Link
                     :href="route('login')"
-                    class="text-sm text-green-600 underline hover:text-green-800 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2"
+                    class="text-sm text-[var(--color-primary)] underline hover:text-[var(--color-primary-strong)] focus:outline-none focus:ring-2 focus:ring-[var(--ring-focus)] focus:ring-offset-2 focus:ring-offset-[var(--color-bg)]"
                 >
                     Já tens conta? Entrar
                 </Link>
 
                 <PrimaryButton
-                    class="bg-green-600 hover:bg-green-700 focus:bg-green-700 active:bg-green-800"
+                    class="bg-[var(--color-primary)] hover:bg-[var(--color-primary-strong)] focus:bg-[var(--color-primary-strong)] active:bg-[var(--color-primary-strong)]"
                     :class="{ 'opacity-25': form.processing }"
                     :disabled="form.processing"
                 >

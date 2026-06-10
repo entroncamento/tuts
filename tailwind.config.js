@@ -1,6 +1,8 @@
 import defaultTheme from "tailwindcss/defaultTheme";
 import forms from "@tailwindcss/forms";
 
+const hslVar = (name) => `hsl(var(${name}) / <alpha-value>)`;
+
 /** @type {import('tailwindcss').Config} */
 export default {
     darkMode: "class",
@@ -22,45 +24,67 @@ export default {
             },
 
             colors: {
-                border: "hsl(var(--border))",
-                input: "hsl(var(--input))",
-                ring: "hsl(var(--ring))",
-                background: "hsl(var(--background))",
-                foreground: "hsl(var(--foreground))",
+                border: hslVar("--border"),
+                input: hslVar("--input"),
+                "input-background": hslVar("--input-background"),
+                "switch-background": hslVar("--switch-background"),
+                ring: hslVar("--ring"),
+                background: hslVar("--background"),
+                foreground: hslVar("--foreground"),
 
                 primary: {
-                    DEFAULT: "hsl(var(--primary))",
-                    foreground: "hsl(var(--primary-foreground))",
+                    DEFAULT: hslVar("--primary"),
+                    foreground: hslVar("--primary-foreground"),
                 },
 
                 secondary: {
-                    DEFAULT: "hsl(var(--secondary))",
-                    foreground: "hsl(var(--secondary-foreground))",
+                    DEFAULT: hslVar("--secondary"),
+                    foreground: hslVar("--secondary-foreground"),
                 },
 
                 destructive: {
-                    DEFAULT: "hsl(var(--destructive))",
-                    foreground: "hsl(var(--destructive-foreground))",
+                    DEFAULT: hslVar("--destructive"),
+                    foreground: hslVar("--destructive-foreground"),
                 },
 
                 muted: {
-                    DEFAULT: "hsl(var(--muted))",
-                    foreground: "hsl(var(--muted-foreground))",
+                    DEFAULT: hslVar("--muted"),
+                    foreground: hslVar("--muted-foreground"),
                 },
 
                 accent: {
-                    DEFAULT: "hsl(var(--accent))",
-                    foreground: "hsl(var(--accent-foreground))",
+                    DEFAULT: hslVar("--accent"),
+                    foreground: hslVar("--accent-foreground"),
                 },
 
                 popover: {
-                    DEFAULT: "hsl(var(--popover))",
-                    foreground: "hsl(var(--popover-foreground))",
+                    DEFAULT: hslVar("--popover"),
+                    foreground: hslVar("--popover-foreground"),
                 },
 
                 card: {
-                    DEFAULT: "hsl(var(--card))",
-                    foreground: "hsl(var(--card-foreground))",
+                    DEFAULT: hslVar("--card"),
+                    foreground: hslVar("--card-foreground"),
+                },
+
+                app: {
+                    bg: "var(--color-bg)",
+                    "bg-muted": "var(--color-bg-muted)",
+                    surface: "var(--color-surface)",
+                    "surface-muted": "var(--color-surface-muted)",
+                    elevated: "var(--color-surface-elevated)",
+                    inset: "var(--color-surface-inset)",
+                    text: "var(--color-text)",
+                    muted: "var(--color-text-muted)",
+                    soft: "var(--color-text-soft)",
+                    inverse: "var(--color-text-inverse)",
+                    border: "var(--color-border)",
+                    "border-soft": "var(--color-border-soft)",
+                    "border-strong": "var(--color-border-strong)",
+                    primary: "var(--color-primary)",
+                    "primary-soft": "var(--color-primary-soft)",
+                    "primary-strong": "var(--color-primary-strong)",
+                    "primary-contrast": "var(--color-primary-contrast)",
                 },
             },
 

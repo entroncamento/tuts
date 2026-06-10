@@ -463,7 +463,7 @@ useShellHandler(handleShellSend)
           <div
             v-for="ev in DEADLINES"
             :key="ev.id"
-            class="transition-colors hover:bg-gray-50"
+            class="transition-colors hover:bg-[var(--color-surface-muted)]"
             style="display: flex; align-items: center; gap: 10px; padding: 6px 8px; border-radius: 8px; cursor: pointer;"
           >
             <div
@@ -495,7 +495,7 @@ useShellHandler(handleShellSend)
           <div
             v-for="goal in goals"
             :key="goal.id"
-            class="transition-colors hover:bg-gray-50"
+            class="transition-colors hover:bg-[var(--color-surface-muted)]"
             style="display: flex; align-items: center; gap: 12px; cursor: pointer; padding: 4px 8px; border-radius: 8px;"
             @click="toggleGoal(goal.id)"
           >

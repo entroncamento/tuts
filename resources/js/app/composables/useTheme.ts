@@ -3,6 +3,10 @@ import { computed, ref } from "vue";
 export type ThemeMode = "system" | "light" | "dark";
 
 const STORAGE_KEY = "tuts-theme-mode";
+const THEME_TRANSITION_CLASS = "theme-transitioning";
+const THEME_TRANSITION_DURATION_MS = 420;
+
+let themeTransitionTimeout: number | undefined;
 
 function getSystemTheme(): "light" | "dark" {
     if (typeof window === "undefined") return "light";
@@ -25,17 +29,32 @@ function getInitialThemeMode(): ThemeMode {
 }
 
 const themeMode = ref<ThemeMode>(getInitialThemeMode());
-const systemTheme = ref<"light" | "dark">(getSystemTheme());
 
 const resolvedTheme = computed<"light" | "dark">(() => {
-    return themeMode.value === "system" ? systemTheme.value : themeMode.value;
+    if (themeMode.value === "system") {
+        return getSystemTheme();
+    }
+
+    return themeMode.value;
 });
 
-function applyTheme(): void {
+function shouldReduceMotion(): boolean {
+    if (typeof window === "undefined") return true;
+
+    return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+function applyTheme(animate = false): void {
     if (typeof document === "undefined") return;
 
     const theme = resolvedTheme.value;
     const root = document.documentElement;
+
+    if (animate && !shouldReduceMotion()) {
+        window.clearTimeout(themeTransitionTimeout);
+        root.classList.add(THEME_TRANSITION_CLASS);
+        root.offsetWidth;
+    }
 
     root.dataset.theme = theme;
     root.dataset.themeMode = themeMode.value;
@@ -44,6 +63,14 @@ function applyTheme(): void {
     root.classList.toggle("light", theme === "light");
 
     root.style.colorScheme = theme;
+
+    if (animate && !shouldReduceMotion()) {
+        themeTransitionTimeout = window.setTimeout(() => {
+            root.classList.remove(THEME_TRANSITION_CLASS);
+        }, THEME_TRANSITION_DURATION_MS);
+    } else {
+        root.classList.remove(THEME_TRANSITION_CLASS);
+    }
 }
 
 export function setThemeMode(mode: ThemeMode): void {
@@ -53,7 +80,7 @@ export function setThemeMode(mode: ThemeMode): void {
         window.localStorage.setItem(STORAGE_KEY, mode);
     }
 
-    applyTheme();
+    applyTheme(true);
 }
 
 export function initTheme(): void {
@@ -64,8 +91,9 @@ export function initTheme(): void {
     const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
 
     mediaQuery.addEventListener("change", () => {
-        systemTheme.value = getSystemTheme();
-        applyTheme();
+        if (themeMode.value === "system") {
+            applyTheme(true);
+        }
     });
 
     window.addEventListener("storage", (event) => {
@@ -75,7 +103,7 @@ export function initTheme(): void {
 
         if (next === "light" || next === "dark" || next === "system") {
             themeMode.value = next;
-            applyTheme();
+            applyTheme(true);
         }
     });
 }

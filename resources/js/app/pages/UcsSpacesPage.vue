@@ -104,6 +104,7 @@ const filteredUcs = computed(() => {
     return ucs.value.filter((uc) => {
         const searchable =
             `${uc.name} ${uc.teacher ?? ""} ${uc.year ?? ""} ${uc.semester ?? ""}`.toLowerCase();
+
         return searchable.includes(q);
     });
 });
@@ -123,7 +124,6 @@ const groupedUcs = computed<UcYearGroup[]>(() => {
         }
 
         const semesterMap = yearMap.get(year);
-
         if (!semesterMap) return;
 
         if (!semesterMap.has(semester)) {
@@ -232,6 +232,7 @@ function openCreateSpaceModal(): void {
 
 function toggleSpaceMenu(space: StudySpace, event: MouseEvent): void {
     event.stopPropagation();
+
     openSpaceMenuId.value =
         openSpaceMenuId.value === space.id ? null : space.id;
 }
@@ -314,6 +315,7 @@ async function handleUpdateSpace(): Promise<void> {
         closeEditSpace();
     } catch (error) {
         console.error("[TUTS] Falha ao editar espaço.", error);
+
         errorMessage.value =
             error instanceof Error
                 ? error.message
@@ -354,6 +356,7 @@ async function handleDeleteSpace(): Promise<void> {
         closeDeleteSpace();
     } catch (error) {
         console.error("[TUTS] Falha ao apagar espaço.", error);
+
         errorMessage.value =
             error instanceof Error
                 ? error.message
@@ -484,15 +487,7 @@ onMounted(loadData);
 </script>
 
 <template>
-    <div
-        style="
-            height: 100%;
-            overflow-y: auto;
-            background: #ffffff;
-            padding-bottom: 40px;
-        "
-        @click="closeSpaceMenu"
-    >
+    <div class="ucs-spaces-page" @click="closeSpaceMenu">
         <div style="max-width: 1200px; margin: 0 auto; padding: 32px 24px">
             <div
                 style="
@@ -509,7 +504,7 @@ onMounted(loadData);
                             font-family: Inter, sans-serif;
                             font-weight: 700;
                             font-size: 28px;
-                            color: #1e1e1e;
+                            color: var(--color-text);
                             margin: 0 0 6px;
                         "
                     >
@@ -565,7 +560,7 @@ onMounted(loadData);
                     display: flex;
                     gap: 12px;
                     margin-bottom: 24px;
-                    border-bottom: 1px solid #e5e5e5;
+                    border-bottom: 1px solid var(--color-border);
                 "
             >
                 <button
@@ -621,7 +616,7 @@ onMounted(loadData);
                     style="
                         width: 100%;
                         box-sizing: border-box;
-                        border: 1px solid #e5e5e5;
+                        border: 1px solid var(--color-border);
                         border-radius: 12px;
                         padding: 12px 14px 12px 40px;
                         font-family: Inter, sans-serif;
@@ -641,8 +636,8 @@ onMounted(loadData);
                     margin: 0 0 22px;
                     padding: 12px 14px;
                     border-radius: 12px;
-                    background: #f6f8f7;
-                    border: 1px solid #e5e5e5;
+                    background: var(--color-surface-muted);
+                    border: 1px solid var(--color-border);
                 "
             >
                 <div>
@@ -651,7 +646,7 @@ onMounted(loadData);
                             font-family: Inter, sans-serif;
                             font-weight: 800;
                             font-size: 13px;
-                            color: #1e1e1e;
+                            color: var(--color-text);
                             margin: 0 0 2px;
                         "
                     >
@@ -749,6 +744,7 @@ onMounted(loadData);
                         >
                             <div class="academic-semester-header">
                                 <span class="academic-semester-dot" />
+
                                 <h3 class="academic-semester-title">
                                     {{ semesterGroup.semester }}
                                 </h3>
@@ -806,7 +802,7 @@ onMounted(loadData);
                                     font-family: Inter, sans-serif;
                                     font-size: 11px;
                                     font-weight: 800;
-                                    color: #ffffff;
+                                    color: var(--color-text-inverse);
                                     letter-spacing: 0.08em;
                                     text-transform: uppercase;
                                 "
@@ -858,7 +854,7 @@ onMounted(loadData);
                                     font-family: Inter, sans-serif;
                                     font-weight: 800;
                                     font-size: 15px;
-                                    color: #1e1e1e;
+                                    color: var(--color-text);
                                     margin: 0 0 6px;
                                 "
                             >
@@ -900,7 +896,7 @@ onMounted(loadData);
                         v-if="filteredSpaces.length === 0"
                         style="
                             grid-column: 1 / -1;
-                            border: 1px dashed #e5e5e5;
+                            border: 1px dashed var(--color-border);
                             border-radius: 16px;
                             padding: 32px;
                             text-align: center;
@@ -973,8 +969,8 @@ onMounted(loadData);
                             display: flex;
                             align-items: center;
                             gap: 14px;
-                            background: #ffffff;
-                            border: 1px solid #e5e5e5;
+                            background: var(--color-surface);
+                            border: 1px solid var(--color-border);
                             border-radius: 14px;
                             padding: 16px;
                             cursor: pointer;
@@ -987,7 +983,7 @@ onMounted(loadData);
                                 width: 40px;
                                 height: 40px;
                                 border-radius: 10px;
-                                background: #f5f5f5;
+                                background: var(--color-surface-muted);
                                 display: flex;
                                 align-items: center;
                                 justify-content: center;
@@ -1002,7 +998,7 @@ onMounted(loadData);
                                     font-family: Inter, sans-serif;
                                     font-weight: 700;
                                     font-size: 14px;
-                                    color: #1e1e1e;
+                                    color: var(--color-text);
                                     margin: 0 0 4px;
                                 "
                             >
@@ -1050,7 +1046,7 @@ onMounted(loadData);
                 style="
                     width: 100%;
                     max-width: 460px;
-                    background: #ffffff;
+                    background: var(--color-surface);
                     border-radius: 18px;
                     box-shadow: 0 24px 70px rgba(0, 0, 0, 0.22);
                     overflow: hidden;
@@ -1071,7 +1067,7 @@ onMounted(loadData);
                                 font-family: Inter, sans-serif;
                                 font-weight: 800;
                                 font-size: 16px;
-                                color: #1e1e1e;
+                                color: var(--color-text);
                                 margin: 0 0 3px;
                             "
                         >
@@ -1111,8 +1107,8 @@ onMounted(loadData);
                         style="
                             padding: 11px 12px;
                             border-radius: 12px;
-                            background: #f6f8f7;
-                            border: 1px solid #e5e5e5;
+                            background: var(--color-surface-muted);
+                            border: 1px solid var(--color-border);
                         "
                     >
                         <p
@@ -1120,7 +1116,7 @@ onMounted(loadData);
                                 font-family: Inter, sans-serif;
                                 font-size: 12px;
                                 font-weight: 700;
-                                color: #1e1e1e;
+                                color: var(--color-text);
                                 margin: 0 0 2px;
                             "
                         >
@@ -1147,7 +1143,7 @@ onMounted(loadData);
                             font-family: Inter, sans-serif;
                             font-size: 12px;
                             font-weight: 700;
-                            color: #1e1e1e;
+                            color: var(--color-text);
                         "
                     >
                         Nome do Espaço
@@ -1160,7 +1156,7 @@ onMounted(loadData);
                                 margin-top: 7px;
                                 width: 100%;
                                 box-sizing: border-box;
-                                border: 1px solid #e5e5e5;
+                                border: 1px solid var(--color-border);
                                 border-radius: 11px;
                                 padding: 11px 12px;
                                 font-family: Inter, sans-serif;
@@ -1175,7 +1171,7 @@ onMounted(loadData);
                             font-family: Inter, sans-serif;
                             font-size: 12px;
                             font-weight: 700;
-                            color: #1e1e1e;
+                            color: var(--color-text);
                         "
                     >
                         Descrição opcional
@@ -1188,7 +1184,7 @@ onMounted(loadData);
                                 width: 100%;
                                 min-height: 92px;
                                 box-sizing: border-box;
-                                border: 1px solid #e5e5e5;
+                                border: 1px solid var(--color-border);
                                 border-radius: 11px;
                                 padding: 11px 12px;
                                 font-family: Inter, sans-serif;
@@ -1209,8 +1205,8 @@ onMounted(loadData);
                 >
                     <button
                         style="
-                            border: 1px solid #e5e5e5;
-                            background: #ffffff;
+                            border: 1px solid var(--color-border);
+                            background: var(--color-surface);
                             color: #656966;
                             border-radius: 10px;
                             padding: 10px 14px;
@@ -1274,7 +1270,7 @@ onMounted(loadData);
                 style="
                     width: 100%;
                     max-width: 460px;
-                    background: #ffffff;
+                    background: var(--color-surface);
                     border-radius: 18px;
                     box-shadow: 0 24px 70px rgba(0, 0, 0, 0.22);
                     overflow: hidden;
@@ -1295,7 +1291,7 @@ onMounted(loadData);
                                 font-family: Inter, sans-serif;
                                 font-weight: 800;
                                 font-size: 16px;
-                                color: #1e1e1e;
+                                color: var(--color-text);
                                 margin: 0 0 3px;
                             "
                         >
@@ -1335,7 +1331,7 @@ onMounted(loadData);
                             font-family: Inter, sans-serif;
                             font-size: 12px;
                             font-weight: 700;
-                            color: #1e1e1e;
+                            color: var(--color-text);
                         "
                     >
                         Nome do Espaço
@@ -1348,7 +1344,7 @@ onMounted(loadData);
                                 margin-top: 7px;
                                 width: 100%;
                                 box-sizing: border-box;
-                                border: 1px solid #e5e5e5;
+                                border: 1px solid var(--color-border);
                                 border-radius: 11px;
                                 padding: 11px 12px;
                                 font-family: Inter, sans-serif;
@@ -1363,7 +1359,7 @@ onMounted(loadData);
                             font-family: Inter, sans-serif;
                             font-size: 12px;
                             font-weight: 700;
-                            color: #1e1e1e;
+                            color: var(--color-text);
                         "
                     >
                         Descrição
@@ -1376,7 +1372,7 @@ onMounted(loadData);
                                 width: 100%;
                                 min-height: 92px;
                                 box-sizing: border-box;
-                                border: 1px solid #e5e5e5;
+                                border: 1px solid var(--color-border);
                                 border-radius: 11px;
                                 padding: 11px 12px;
                                 font-family: Inter, sans-serif;
@@ -1397,8 +1393,8 @@ onMounted(loadData);
                 >
                     <button
                         style="
-                            border: 1px solid #e5e5e5;
-                            background: #ffffff;
+                            border: 1px solid var(--color-border);
+                            background: var(--color-surface);
                             color: #656966;
                             border-radius: 10px;
                             padding: 10px 14px;
@@ -1460,7 +1456,7 @@ onMounted(loadData);
                 style="
                     width: 100%;
                     max-width: 430px;
-                    background: #ffffff;
+                    background: var(--color-surface);
                     border-radius: 18px;
                     box-shadow: 0 24px 70px rgba(0, 0, 0, 0.22);
                     overflow: hidden;
@@ -1472,7 +1468,7 @@ onMounted(loadData);
                             font-family: Inter, sans-serif;
                             font-weight: 900;
                             font-size: 17px;
-                            color: #1e1e1e;
+                            color: var(--color-text);
                             margin: 0 0 8px;
                         "
                     >
@@ -1504,8 +1500,8 @@ onMounted(loadData);
                 >
                     <button
                         style="
-                            border: 1px solid #e5e5e5;
-                            background: #ffffff;
+                            border: 1px solid var(--color-border);
+                            background: var(--color-surface);
                             color: #656966;
                             border-radius: 10px;
                             padding: 10px 14px;
@@ -1542,6 +1538,28 @@ onMounted(loadData);
 </template>
 
 <style scoped>
+.ucs-spaces-page {
+    --academic-title-color: var(--color-text);
+    --academic-subtitle-color: var(--color-text-muted);
+    --academic-subtitle-opacity: 1;
+
+    height: 100%;
+    overflow-y: auto;
+    background: var(--color-surface);
+    padding-bottom: 40px;
+}
+
+:global([data-theme="dark"]) .ucs-spaces-page,
+:global(html[data-theme="dark"]) .ucs-spaces-page,
+:global(body[data-theme="dark"]) .ucs-spaces-page,
+:global(html.dark) .ucs-spaces-page,
+:global(body.dark) .ucs-spaces-page,
+:global(.dark) .ucs-spaces-page {
+    --academic-title-color: var(--color-text-inverse);
+    --academic-subtitle-color: var(--color-text-inverse);
+    --academic-subtitle-opacity: 0.72;
+}
+
 .academic-year-section {
     display: flex;
     flex-direction: column;
@@ -1554,14 +1572,15 @@ onMounted(loadData);
     justify-content: space-between;
     gap: 16px;
     padding-bottom: 10px;
-    border-bottom: 1px solid #e5e5e5;
+    border-bottom: 1px solid var(--color-border);
 }
 
 .academic-year-title {
     font-family: Inter, sans-serif;
     font-weight: 900;
     font-size: 22px;
-    color: #1e1e1e;
+    color: var(--academic-title-color);
+    -webkit-text-fill-color: var(--academic-title-color);
     margin: 0 0 4px;
 }
 
@@ -1569,7 +1588,9 @@ onMounted(loadData);
     font-family: Inter, sans-serif;
     font-weight: 500;
     font-size: 12px;
-    color: #9e9e9e;
+    color: var(--academic-subtitle-color);
+    -webkit-text-fill-color: var(--academic-subtitle-color);
+    opacity: var(--academic-subtitle-opacity);
     margin: 0;
 }
 
@@ -1597,9 +1618,11 @@ onMounted(loadData);
     font-family: Inter, sans-serif;
     font-weight: 800;
     font-size: 14px;
-    color: #1e1e1e;
+    color: var(--academic-title-color);
+    -webkit-text-fill-color: var(--academic-title-color);
     margin: 0;
 }
+
 
 .uc-card-grid {
     display: grid;
@@ -1638,8 +1661,8 @@ onMounted(loadData);
     height: 100%;
     display: flex;
     flex-direction: column;
-    background: #ffffff;
-    border: 1px solid #e5e5e5;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
     border-radius: 16px;
     overflow: visible;
     cursor: pointer;
@@ -1656,7 +1679,7 @@ onMounted(loadData);
 
 .space-card > div:last-child {
     border-radius: 0 0 16px 16px;
-    background: #ffffff;
+    background: var(--color-surface);
 }
 
 .space-menu-button {
@@ -1668,7 +1691,7 @@ onMounted(loadData);
     height: 30px;
     border: none;
     border-radius: 9px;
-    background: rgba(255, 255, 255, 0.16);
+    background: var(--color-border);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1676,7 +1699,7 @@ onMounted(loadData);
 }
 
 .space-menu-button:hover {
-    background: rgba(255, 255, 255, 0.26);
+    background: var(--color-border-soft);
 }
 
 .space-menu {
@@ -1687,8 +1710,8 @@ onMounted(loadData);
     width: 160px;
     padding: 6px;
     border-radius: 12px;
-    background: #ffffff;
-    border: 1px solid #e5e5e5;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
     box-shadow: 0 14px 35px rgba(0, 0, 0, 0.16);
 }
 
@@ -1702,12 +1725,12 @@ onMounted(loadData);
     font-family: Inter, sans-serif;
     font-size: 12px;
     font-weight: 700;
-    color: #1e1e1e;
+    color: var(--color-text);
     cursor: pointer;
 }
 
 .space-menu-item:hover {
-    background: #f6f8f7;
+    background: var(--color-surface-muted);
 }
 
 .space-menu-item.danger {

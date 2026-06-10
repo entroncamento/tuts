@@ -1,7 +1,7 @@
 <template>
   <div
     v-if="didError"
-    :class="['inline-block bg-gray-100 text-center align-middle', attrs.class as string]"
+    :class="['inline-block bg-[var(--color-bg-muted)] text-center align-middle', attrs.class as string]"
     :style="attrs.style as StyleValue"
   >
     <div class="flex items-center justify-center w-full h-full">

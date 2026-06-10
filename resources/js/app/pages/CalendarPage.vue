@@ -424,7 +424,7 @@ function colEventsFor(dayIdx: number) {
           </div>
           <div style="display: flex; align-items: center; gap: 8px; flex-shrink: 0;">
             <button
-              class="transition-colors hover:bg-gray-100"
+              class="transition-colors hover:bg-[var(--color-surface-muted)]"
               style="font-family: Inter, sans-serif; font-weight: 500; font-size: 13px; color: #656966; background: transparent; border: none; cursor: pointer; padding: 6px 4px; border-radius: 6px;"
               @click="handleRejectAI"
             >
@@ -513,7 +513,7 @@ function colEventsFor(dayIdx: number) {
                   { key: 'exames', label: 'Exames', color: '#E53935' },
                 ]"
                 :key="item.key"
-                class="transition-colors hover:bg-gray-50"
+                class="transition-colors hover:bg-[var(--color-surface-muted)]"
                 style="display: flex; align-items: center; gap: 10px; width: 100%; background: none; border: none; cursor: pointer; padding: 9px 14px; text-align: left;"
                 @click="toggleFilter(item.key as keyof typeof filters)"
               >
@@ -559,7 +559,7 @@ function colEventsFor(dayIdx: number) {
         <div style="display: flex; align-items: center; gap: 10px;">
           <div style="display: flex; align-items: center; gap: 4px;">
             <button
-              class="flex items-center justify-center transition-all hover:bg-gray-50"
+              class="flex items-center justify-center transition-all hover:bg-[var(--color-surface-muted)]"
               style="width: 28px; height: 28px; background: none; border: 1px solid #E5E5E5; cursor: pointer; border-radius: 8px;"
             >
               <ChevronLeft :size="13" :stroke-width="2" color="#9E9E9E" />
@@ -570,7 +570,7 @@ function colEventsFor(dayIdx: number) {
               {{ periodLabel }}
             </span>
             <button
-              class="flex items-center justify-center transition-all hover:bg-gray-50"
+              class="flex items-center justify-center transition-all hover:bg-[var(--color-surface-muted)]"
               style="width: 28px; height: 28px; background: none; border: 1px solid #E5E5E5; cursor: pointer; border-radius: 8px;"
             >
               <ChevronRight :size="13" :stroke-width="2" color="#9E9E9E" />
@@ -972,7 +972,7 @@ function colEventsFor(dayIdx: number) {
             Adicionar Evento
           </h2>
           <button
-            class="flex items-center justify-center transition-all hover:bg-gray-50"
+            class="flex items-center justify-center transition-all hover:bg-[var(--color-surface-muted)]"
             style="width: 32px; height: 32px; background: none; border: 1px solid #E5E5E5; cursor: pointer; border-radius: 8px;"
             @click="isAddEventOpen = false"
           >
@@ -1048,7 +1048,7 @@ function colEventsFor(dayIdx: number) {
         <!-- Actions -->
         <div style="display: flex; gap: 10px; margin-top: 4px;">
           <button
-            class="transition-colors hover:bg-gray-50"
+            class="transition-colors hover:bg-[var(--color-surface-muted)]"
             style="flex: 1; font-family: Inter, sans-serif; font-weight: 500; font-size: 14px; color: #656966; background: none; border: 1px solid #E5E5E5; border-radius: 10px; padding: 10px 0; cursor: pointer;"
             @click="isAddEventOpen = false"
           >

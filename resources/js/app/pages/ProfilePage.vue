@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch } from "vue";
+import { ref, computed, watch, onMounted } from "vue";
 import {
     Mail,
     Phone,
@@ -56,6 +56,9 @@ import { setThemeMode, useTheme, type ThemeMode } from "@/app/composables/useThe
 const { role } = useAppRole();
 
 // ─── Nav ───────────────────────────────────────────────────────────────────────
+const DEFAULT_PROFILE_NAV = "Perfil";
+const PROFILE_ACTIVE_NAV_KEY = "tuts-profile-active-tab";
+
 const STUDENT_NAV = [
     "Perfil",
     "Os meus ficheiros",
@@ -95,13 +98,40 @@ const IMPLEMENTED = new Set([
     "Ajuda",
 ]);
 
-const activeNav = ref("Perfil");
+const activeNav = ref(DEFAULT_PROFILE_NAV);
 const navItems = computed(() =>
     role.value === "teacher" ? TEACHER_NAV : STUDENT_NAV,
 );
 
+function isProfileNavItem(value: string | null | undefined): value is string {
+    return typeof value === "string" && navItems.value.includes(value);
+}
+
+onMounted(() => {
+    if (typeof window === "undefined") return;
+
+    const savedNav = window.localStorage.getItem(PROFILE_ACTIVE_NAV_KEY);
+
+    if (isProfileNavItem(savedNav)) {
+        activeNav.value = savedNav;
+    }
+});
+
+watch(activeNav, (nav) => {
+    if (typeof window === "undefined") return;
+
+    if (!isProfileNavItem(nav)) {
+        activeNav.value = DEFAULT_PROFILE_NAV;
+        return;
+    }
+
+    window.localStorage.setItem(PROFILE_ACTIVE_NAV_KEY, nav);
+});
+
 watch(role, () => {
-    activeNav.value = "Perfil";
+    if (!isProfileNavItem(activeNav.value)) {
+        activeNav.value = DEFAULT_PROFILE_NAV;
+    }
 });
 
 // ─── Quick info ────────────────────────────────────────────────────────────────
@@ -450,7 +480,7 @@ const quickInfo = computed(() =>
                 :key="item"
                 :class="
                     item !== activeNav
-                        ? 'transition-colors hover:bg-gray-50'
+                        ? 'transition-colors hover:bg-[var(--color-surface-muted)]'
                         : ''
                 "
                 :style="{
@@ -747,7 +777,7 @@ const quickInfo = computed(() =>
                                 @click.stop="
                                     itemToDelete = { type: 'uc', id: uc.id }
                                 "
-                                class="transition-colors hover:bg-red-50"
+                                class="transition-colors hover:bg-[var(--color-danger-soft)]"
                                 style="
                                     position: absolute;
                                     top: 12px;
@@ -1297,7 +1327,7 @@ const quickInfo = computed(() =>
                                 @click.stop="
                                     itemToDelete = { type: 'file', id: file.id }
                                 "
-                                class="transition-colors hover:bg-red-50"
+                                class="transition-colors hover:bg-[var(--color-danger-soft)]"
                                 style="
                                     background: none;
                                     border: none;
@@ -1432,7 +1462,7 @@ const quickInfo = computed(() =>
                     >
                         <button
                             @click="handleCreateFolder"
-                            class="transition-colors hover:bg-gray-50"
+                            class="transition-colors hover:bg-[var(--color-surface-muted)]"
                             style="
                                 display: inline-flex;
                                 align-items: center;
@@ -1566,7 +1596,7 @@ const quickInfo = computed(() =>
                         <div
                             v-for="fol in visibleFolders"
                             :key="fol.id"
-                            class="group transition-colors hover:bg-gray-50"
+                            class="group transition-colors hover:bg-[var(--color-surface-muted)]"
                             style="
                                 background: var(--tuts-surface);
                                 border: 1px solid var(--tuts-border);
@@ -1627,7 +1657,7 @@ const quickInfo = computed(() =>
                                     openMenu =
                                         openMenu === fol.id ? null : fol.id
                                 "
-                                class="opacity-0 group-hover:opacity-100 transition-opacity hover:bg-gray-100"
+                                class="opacity-0 group-hover:opacity-100 transition-opacity hover:bg-[var(--color-surface-muted)]"
                                 style="
                                     background: none;
                                     border: none;
@@ -1673,7 +1703,7 @@ const quickInfo = computed(() =>
                                             openMenu = null;
                                         }
                                     "
-                                    class="transition-colors hover:bg-gray-50"
+                                    class="transition-colors hover:bg-[var(--color-surface-muted)]"
                                     style="
                                         display: flex;
                                         align-items: center;
@@ -1698,7 +1728,7 @@ const quickInfo = computed(() =>
                                 </button>
                                 <button
                                     @click="handleDeleteFolder(fol.id)"
-                                    class="transition-colors hover:bg-red-50"
+                                    class="transition-colors hover:bg-[var(--color-danger-soft)]"
                                     style="
                                         display: flex;
                                         align-items: center;
@@ -1807,7 +1837,7 @@ const quickInfo = computed(() =>
                                                 name: file.name,
                                             }
                                         "
-                                        class="opacity-0 group-hover:opacity-100 transition-opacity hover:bg-blue-50"
+                                        class="opacity-0 group-hover:opacity-100 transition-opacity hover:bg-[var(--color-info-soft)]"
                                         style="
                                             background: none;
                                             border: none;
@@ -1827,7 +1857,7 @@ const quickInfo = computed(() =>
                                     </button>
                                     <button
                                         @click="handleDeleteDriveFile(file.id)"
-                                        class="opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-50"
+                                        class="opacity-0 group-hover:opacity-100 transition-opacity hover:bg-[var(--color-danger-soft)]"
                                         style="
                                             background: none;
                                             border: none;
@@ -2696,6 +2726,7 @@ const quickInfo = computed(() =>
                                         v-for="t in themeOptions"
                                         :key="t.id"
                                         type="button"
+                                        class="theme-mode-option"
                                         @click="selectTheme(t.id)"
                                         :style="{
                                             display: 'inline-flex',
@@ -2720,6 +2751,11 @@ const quickInfo = computed(() =>
                                     >
                                         <component
                                             :is="t.icon"
+                                            class="theme-mode-option-icon"
+                                            :class="{
+                                                'theme-mode-option-icon-active':
+                                                    themeMode === t.id,
+                                            }"
                                             :size="15"
                                             :stroke-width="1.8"
                                             :color="
@@ -3776,7 +3812,7 @@ const quickInfo = computed(() =>
                                     },
                                 ]"
                                 :key="label"
-                                class="transition-colors hover:bg-gray-50 text-left"
+                                class="transition-colors hover:bg-[var(--color-surface-muted)] text-left"
                                 style="
                                     background: var(--tuts-surface);
                                     border: 1px solid var(--tuts-border);
@@ -4134,7 +4170,7 @@ const quickInfo = computed(() =>
                 <div style="display: flex; gap: 10px">
                     <button
                         @click="itemToDelete = null"
-                        class="transition-colors hover:bg-gray-50"
+                        class="transition-colors hover:bg-[var(--color-surface-muted)]"
                         style="
                             flex: 1;
                             font-family: Inter, sans-serif;
@@ -4263,7 +4299,7 @@ const quickInfo = computed(() =>
                 <div style="display: flex; gap: 10px">
                     <button
                         @click="renameTarget = null"
-                        class="transition-colors hover:bg-gray-50"
+                        class="transition-colors hover:bg-[var(--color-surface-muted)]"
                         style="
                             flex: 1;
                             font-family: Inter, sans-serif;
@@ -4324,6 +4360,59 @@ const quickInfo = computed(() =>
 
 .tuts-profile-page * {
     box-sizing: border-box;
+}
+
+.theme-mode-option {
+    transition:
+        background-color 260ms cubic-bezier(0.22, 1, 0.36, 1),
+        color 220ms ease,
+        border-color 260ms cubic-bezier(0.22, 1, 0.36, 1),
+        box-shadow 260ms ease,
+        fill 220ms ease,
+        stroke 220ms ease,
+        scale 160ms ease;
+}
+
+.theme-mode-option:hover {
+    box-shadow: var(--shadow-soft);
+    scale: 1.01;
+}
+
+.theme-mode-option:active {
+    scale: 0.985;
+}
+
+.theme-mode-option-icon {
+    opacity: 0.72;
+    transform: rotate(-4deg);
+    transform-origin: center;
+    transition:
+        opacity 220ms ease,
+        transform 320ms cubic-bezier(0.22, 1, 0.36, 1),
+        fill 220ms ease,
+        stroke 220ms ease;
+}
+
+.theme-mode-option-icon-active {
+    opacity: 1;
+    transform: rotate(0deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .theme-mode-option,
+    .theme-mode-option-icon {
+        transition: none !important;
+    }
+
+    .theme-mode-option:hover,
+    .theme-mode-option:active {
+        scale: 1;
+    }
+
+    .theme-mode-option-icon,
+    .theme-mode-option-icon-active {
+        transform: none;
+    }
 }
 
 .tuts-profile-page :deep(input),
@@ -4447,4 +4536,3 @@ const quickInfo = computed(() =>
     border-color: var(--tuts-border-soft) !important;
 }
 </style>
-
