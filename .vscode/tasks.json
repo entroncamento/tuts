@@ -26,8 +26,17 @@
     },
     {
       "label": "0. REDIS (Redis Stack)",
-      "type": "shell",
-      "command": "if docker inspect redis-stack >/dev/null 2>&1; then docker start redis-stack; else echo 'Container redis-stack nao existe. Cria-o primeiro, por exemplo: docker run -d --name redis-stack -p 6379:6379 redis/redis-stack-server:latest'; fi",
+      "type": "process",
+      "command": "wsl.exe",
+      "args": [
+        "-d",
+        "Ubuntu",
+        "--cd",
+        "/home/gilal/tuts-workspace",
+        "bash",
+        "-lc",
+        "docker inspect redis-stack >/dev/null 2>&1 && docker start redis-stack || echo \"Container redis-stack nao existe. Cria-o com: docker run -d --name redis-stack -p 6379:6379 redis/redis-stack-server:latest\""
+      ],
       "presentation": {
         "reveal": "always",
         "close": false,
@@ -37,11 +46,17 @@
     },
     {
       "label": "1. BACKEND (Laravel/Sail)",
-      "type": "shell",
-      "command": "./vendor/bin/sail up -d",
-      "options": {
-        "cwd": "${workspaceFolder}/tuts-core"
-      },
+      "type": "process",
+      "command": "wsl.exe",
+      "args": [
+        "-d",
+        "Ubuntu",
+        "--cd",
+        "/home/gilal/tuts-workspace/tuts-core",
+        "bash",
+        "-lc",
+        "./vendor/bin/sail up -d"
+      ],
       "presentation": {
         "group": "tuts-services",
         "panel": "new"
@@ -54,11 +69,17 @@
     },
     {
       "label": "2. FRONTEND (Vue/Vite)",
-      "type": "shell",
-      "command": "set -e; echo 'A aguardar pelo Laravel/Sail...'; until container=$(./vendor/bin/sail ps -q laravel.test 2>/dev/null) && [ -n \"$container\" ] && docker inspect -f '{{.State.Running}}' \"$container\" 2>/dev/null | grep -q true; do sleep 2; done; echo 'A limpar Vite/npm/node antigo dentro do container...'; docker exec \"$container\" sh -lc 'pkill -9 -f [v]ite 2>/dev/null || true; pkill -9 -f [n]pm 2>/dev/null || true; pkill -9 -f [n]ode 2>/dev/null || true'; rm -f public/hot; echo 'A iniciar Vue/Vite...'; ./vendor/bin/sail npm run dev -- --host 0.0.0.0",
-      "options": {
-        "cwd": "${workspaceFolder}/tuts-core"
-      },
+      "type": "process",
+      "command": "wsl.exe",
+      "args": [
+        "-d",
+        "Ubuntu",
+        "--cd",
+        "/home/gilal/tuts-workspace/tuts-core",
+        "bash",
+        "-lc",
+        "set -e\ncd /home/gilal/tuts-workspace/tuts-core\necho \"A aguardar pelo Laravel/Sail...\"\nuntil container=$(./vendor/bin/sail ps -q laravel.test 2>/dev/null) && [ -n \"$container\" ] && docker inspect -f '{{.State.Running}}' \"$container\" 2>/dev/null | grep -q true; do\n  sleep 2\ndone\n\necho \"A limpar Vite/npm/node antigo dentro do container...\"\ndocker exec \"$container\" sh -lc 'pkill -9 -f [v]ite 2>/dev/null || true; pkill -9 -f [n]pm 2>/dev/null || true; pkill -9 -f [n]ode 2>/dev/null || true'\n\nrm -f public/hot\n\necho \"A iniciar Vue/Vite...\"\n./vendor/bin/sail npm run dev -- --host 0.0.0.0"
+      ],
       "isBackground": true,
       "presentation": {
         "group": "tuts-services",
@@ -72,11 +93,17 @@
     },
     {
       "label": "3. RAG (Python/FastAPI)",
-      "type": "shell",
-      "command": "./venv/bin/python -m uvicorn main:app --host 0.0.0.0 --port 8001 --env-file .env --reload --reload-dir . --reload-exclude venv --reload-exclude faiss_db --reload-exclude __pycache__ --reload-exclude pdfs",
-      "options": {
-        "cwd": "${workspaceFolder}/tuts-rag-service"
-      },
+      "type": "process",
+      "command": "wsl.exe",
+      "args": [
+        "-d",
+        "Ubuntu",
+        "--cd",
+        "/home/gilal/tuts-workspace/tuts-rag-service",
+        "bash",
+        "-lc",
+        "set -e\ncd /home/gilal/tuts-workspace/tuts-rag-service\nif [ ! -x ./venv/bin/python3 ]; then\n  echo \"RAG venv Linux nao encontrado em ./venv/bin/python3\"\n  exit 1\nfi\n./venv/bin/python3 -m uvicorn main:app --host 0.0.0.0 --port 8001 --env-file .env --reload --reload-dir . --reload-exclude .venv --reload-exclude venv --reload-exclude faiss_db --reload-exclude __pycache__ --reload-exclude pdfs"
+      ],
       "isBackground": true,
       "presentation": {
         "group": "tuts-services",
@@ -90,11 +117,9 @@
     },
     {
       "label": "4. GIT",
-      "type": "shell",
-      "command": "bash",
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
+      "type": "process",
+      "command": "wsl.exe",
+      "args": ["-d", "Ubuntu", "--cd", "/home/gilal/tuts-workspace", "bash"],
       "presentation": {
         "group": "tuts-workspace",
         "panel": "new"
