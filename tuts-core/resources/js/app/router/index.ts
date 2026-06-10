@@ -17,6 +17,7 @@ const PlanningPage    = () => import('@/app/pages/PlanningPage.vue')
 const MyPlansPage     = () => import('@/app/pages/MyPlansPage.vue')
 const SpaceDetailPage = () => import('@/app/pages/SpaceDetailPage.vue')
 const DashboardPage   = () => import('@/app/pages/DashboardPage.vue')
+const NotificationsPage = () => import('@/app/pages/NotificationsPage.vue')
 
 // ─── /ucs branch component ────────────────────────────────────────────────────
 // Mirrors the UcsRouteHandler component from React routes.tsx.
@@ -122,6 +123,16 @@ const routes: RouteRecordRaw[] = [
         name:      'profile',
         component: ProfilePage,
         meta:      { pageTitle: 'Perfil' },
+      },
+      {
+        path:      'notificacoes',
+        name:      'notifications',
+        component: NotificationsPage,
+        meta:      { pageTitle: 'Notificações' },
+      },
+      {
+        path:     'notifications',
+        redirect: '/notificacoes',
       },
 
       // ── UC & Space detail ─────────────────────────────────────────────────

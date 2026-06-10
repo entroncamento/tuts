@@ -8,6 +8,7 @@ export type ActivePageId =
   | 'ucs'
   | 'chat'
   | 'profile'
+  | 'notifications'
   | 'gestao'
   | 'dashboard'
 

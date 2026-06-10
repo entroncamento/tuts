@@ -28,6 +28,7 @@ const activePage = computed<ActivePageId>(() => {
     if (p === "/ucs" || p === "/spaces") return "ucs";
     if (p === "/chat") return "chat";
     if (p === "/profile") return "profile";
+    if (p === "/notificacoes") return "notifications";
     if (p === "/dashboard") return "dashboard";
 
     return "home";
@@ -63,6 +64,8 @@ const breadcrumb = computed<string>(() => {
             return "Os Meus Planos";
         case "/profile":
             return "Perfil";
+        case "/notificacoes":
+            return "Notificações";
         case "/dashboard":
             return "Dashboard Pedagógico";
         default:
@@ -82,6 +85,7 @@ const showChatInput = computed<boolean>(() => {
         p !== "/profile" &&
         !p.startsWith("/planificacao") &&
         p !== "/meus-planos" &&
+        p !== "/notificacoes" &&
         !p.startsWith("/space/") &&
         !(p === "/ucs" && roleStore.role === "teacher")
     );

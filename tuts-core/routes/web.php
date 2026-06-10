@@ -93,7 +93,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::get('/{any}', function () {
         return Inertia::render('TutsNew');
-    })->where('any', 'home|chat|ucs|uc/.*|spaces|space/.*|calendar|planificacao.*|meus-planos|profile|dashboard');
+    })->where('any', 'home|chat|ucs|uc/.*|spaces|space/.*|calendar|planificacao.*|meus-planos|profile|dashboard|notificacoes|notifications');
 });
 
 require __DIR__ . '/auth.php';
