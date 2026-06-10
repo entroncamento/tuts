@@ -10,9 +10,7 @@ use App\Http\Controllers\Api\StudySpaceController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
-Route::get('/', function () {
-    return Inertia::render('Welcome');
-})->name('home');
+Route::redirect('/', '/novo')->name('home');
 
 Route::post('/api/login', [AuthController::class, 'login'])
     ->middleware('throttle:5,1');
