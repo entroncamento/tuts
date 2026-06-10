@@ -63,7 +63,7 @@ A task de VS Code espera pelo container Laravel, limpa processos antigos de Vite
 
 ```bash
 cd ${workspaceFolder}/tuts-rag-service
-./venv/bin/python -m uvicorn main:app \
+./venv/bin/python3 -m uvicorn main:app \
   --host 0.0.0.0 \
   --port 8001 \
   --env-file .env \
@@ -179,7 +179,7 @@ Sanity check:
 
 ```bash
 cd ${workspaceFolder}/tuts-rag-service
-./venv/bin/python scripts/sanity_faiss_paths.py
+./venv/bin/python3 scripts/sanity_faiss_paths.py
 ```
 
 ou:
@@ -255,7 +255,7 @@ Ela arranca em paralelo:
 - [ ] Correr `scripts/sanity_faiss_paths.py`.
 - [ ] Correr `./vendor/bin/sail artisan route:list`.
 - [ ] Correr `npm run build`.
-- [ ] Correr `./venv/bin/python -m compileall .` no RAG.
+- [ ] Correr `./venv/bin/python3 -m compileall .` no RAG.
 
 ## 9. Ficheiros de apoio gerados
 
