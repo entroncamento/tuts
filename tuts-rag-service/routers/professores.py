@@ -7,6 +7,7 @@ import time
 import secrets
 import fitz  # PyMuPDF para validação segura
 import aiofiles
+from pathlib import Path
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, Query
 from fastapi.security import APIKeyHeader
 
@@ -93,14 +94,26 @@ async def apagar_conteudo_uc(
             detail="Confirmação de segurança ausente ou inválida. Parâmetro confirmacao=APAGAR é obrigatório."
         )
 
-    uc_limpa = limpar_nome_uc(uc)
-    db_path = os.path.join(settings.base_faiss_dir, uc_limpa)
+    uc_limpa = limpar_nome_uc(uc).strip()
+
+    if not uc_limpa:
+        raise HTTPException(status_code=400, detail="Nome de UC invalido.")
+
+    base_faiss = Path(settings.base_faiss_dir).resolve()
+    db_path = (base_faiss / uc_limpa).resolve()
+
+    if db_path == base_faiss:
+        raise HTTPException(status_code=403, detail="Caminho FAISS inseguro.")
+
+    if base_faiss not in db_path.parents:
+        raise HTTPException(status_code=403, detail="Caminho FAISS fora da pasta permitida.")
+
     logger.warning("### DELETE DESTRUTIVO ATIVADO ### uc=%s", uc_limpa)
 
     faiss_removido = False
     pdfs_removidos = 0
 
-    if os.path.exists(db_path):
+    if db_path.exists():
         shutil.rmtree(db_path)
         faiss_removido = True
         logger.info("[DELETE] Pasta FAISS removida: %s", db_path)
@@ -146,6 +159,10 @@ async def ingestao(
     chunk_overlap: int = Form(250),
     files: list[UploadFile] = File(...),
 ):
+    if not getattr(settings, "ingestion_enabled", True):
+        logger.warning("[INGESTAO] Pedido bloqueado: ingestion_enabled=false")
+        raise HTTPException(status_code=403, detail="Ingestao desativada por configuracao.")
+
     t0_total = time.perf_counter()
 
     # 1. Validações Iniciais (Prevenção de DoS)

@@ -72,6 +72,7 @@ class Settings(BaseSettings):
     # ── ORIGENS / URLS ────────────────────────────────────────────────────────
     frontend_origin: str = "http://localhost:5173,http://127.0.0.1:5173"
     laravel_url: str = "http://127.0.0.1:8000"
+    internal_allowed_hosts: str = ""
 
     # ── PATHS ─────────────────────────────────────────────────────────────────
     uc_json_path: str = str(BASE_DIR / "database" / "data" / "cadeiras_mtc.json")
@@ -101,6 +102,8 @@ class Settings(BaseSettings):
 
     # Cache semântica
     semantic_cache_enabled: bool = True
+    embedding_dim: int = 384
+    ingestion_enabled: bool = True
 
     # Buffer SSE para não enviar chunks demasiado pequenos
     sse_buffer_chars: int = 180
@@ -109,6 +112,11 @@ class Settings(BaseSettings):
     embedding_model: str = "paraphrase-multilingual-MiniLM-L12-v2"
     reranker_model: str = "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"
     rrf_k: int = 60
+    ia_http_timeout_s: float = 20.0
+    ia_http_read_timeout_s: float = 120.0
+    ia_bg_max_tokens: int = 280
+    ia_chat_max_tokens: int = 1200
+    ia_fallback_max_tokens: int = 900
 
     # ── SERVIDOR ──────────────────────────────────────────────────────────────
     server_host: str = "127.0.0.1"
@@ -139,6 +147,20 @@ class Settings(BaseSettings):
             if self.expose_public_pdfs:
                 raise ValueError(
                     "CRITICAL: expose_public_pdfs não pode estar True em produção."
+                )
+
+            if not self.professor_api_key:
+                raise ValueError(
+                    "CRITICAL: professor_api_key e obrigatorio em producao."
+                )
+
+            if not self.ingestion_enabled:
+                logger.info("Ingestao desativada por configuracao em producao.")
+
+            if not self.internal_allowed_hosts.strip():
+                logger.warning(
+                    "ATENCAO: internal_allowed_hosts vazio em producao. "
+                    "A seguranca depende do X-Internal-Token e da rede privada."
                 )
 
             if self.server_host == "0.0.0.0":
