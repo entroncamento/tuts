@@ -22,6 +22,7 @@ from config import settings, PreferenciaEnum, logger
 from core.ml_models import embeddings_model, executor
 from core.cache import procurar_cache_redis, guardar_cache_redis, obter_versao_uc
 from core.background import disparar_background
+from core.security import validar_host_interno
 from core.utils import limpar_nome_uc, sanitizar_input
 from core.retrieval import (
     get_vector_store,
@@ -428,8 +429,11 @@ async def perguntar(
         )
         raise HTTPException(status_code=403, detail="Acesso negado.")
 
+    validar_host_interno(request, source="/perguntar")
+
     if (
-        settings.app_env == "production"
+        False
+        and settings.app_env == "production"
         and request.client
         and request.client.host not in ["127.0.0.1", "::1", settings.server_host]
     ):

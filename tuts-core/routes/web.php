@@ -57,8 +57,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::prefix('api/chat')->group(function () {
         Route::get('/ucs', [ChatController::class, 'listarChatsPorUC']);
         Route::get('/{id}', [ChatController::class, 'obterHistorico']);
-        Route::post('/', [ChatController::class, 'criarChat'])->middleware('throttle:30,1');
-        Route::post('/stream', [ChatController::class, 'enviarPerguntaStream'])->middleware('throttle:15,1');
+        Route::post('/', [ChatController::class, 'criarChat'])->middleware('throttle:chat.create');
+        Route::post('/stream', [ChatController::class, 'enviarPerguntaStream'])->middleware('throttle:chat.stream');
     });
 
     Route::get('/dashboard-professor', function () {

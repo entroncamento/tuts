@@ -43,7 +43,62 @@ def _validar_pdf(caminho_pdf: str) -> None:
     except Exception as e:
         raise ValueError(f"Ficheiro PDF malformado ou corrompido: {e}")
 
-def build_index(temp_path: str, filename: str, uc: str, chunk_size: int, chunk_overlap: int) -> tuple[int, list]:
+def _sincronizar_uc_para_hub(uc: str, db_path: Path) -> None:
+    """
+    Faz upload dos 3 ficheiros FAISS de uma UC para o HF Dataset repo.
+    Opera em modo best-effort: falhas são registadas mas nunca propagadas.
+    """
+    hf_token = os.getenv("HF_TOKEN")
+    hf_repo = os.getenv("HF_DATASET_REPO")
+
+    if not hf_token or not hf_repo:
+        logger.debug("[FAISS_SYNC] HF_TOKEN ou HF_DATASET_REPO não configurados — upload ignorado.")
+        return
+
+    try:
+        from huggingface_hub import HfApi
+        api = HfApi()
+
+        uc_folder = db_path.name  # nome canónico, ex: "teorias_da_comunicacao"
+        ficheiros = ["index.faiss", "index.pkl", "manifest.json"]
+        uploaded = []
+
+        for nome in ficheiros:
+            caminho = db_path / nome
+            if not caminho.exists():
+                logger.warning("[FAISS_SYNC] Ficheiro não encontrado, upload ignorado: %s", caminho)
+                continue
+
+            api.upload_file(
+                path_or_fileobj=str(caminho),
+                path_in_repo=f"{uc_folder}/{nome}",
+                repo_id=hf_repo,
+                repo_type="dataset",
+                token=hf_token,
+                commit_message=f"sync: {uc_folder}/{nome}",
+            )
+            uploaded.append(nome)
+
+        logger.info(
+            "[FAISS_SYNC] UC '%s' sincronizada para %s (%d ficheiros: %s)",
+            uc, hf_repo, len(uploaded), ", ".join(uploaded),
+        )
+
+    except Exception as exc:
+        logger.warning(
+            "[FAISS_SYNC] ⚠️  Falha ao sincronizar UC '%s' para HF Hub (%s). "
+            "Os dados estão salvos localmente.",
+            uc, type(exc).__name__,
+        )
+
+def build_index(
+    temp_path: str,
+    filename: str,
+    uc: str,
+    chunk_size: int,
+    chunk_overlap: int,
+    metadata_extra: dict | None = None,
+) -> tuple[int, list]:
     t0_total = time.perf_counter()
     clean_filename = os.path.basename(filename)
 
@@ -68,6 +123,11 @@ def build_index(temp_path: str, filename: str, uc: str, chunk_size: int, chunk_o
     t0_load = time.perf_counter()
     loader = PyMuPDFLoader(temp_path)
     documentos = loader.load()
+
+    # Injetar metadata_extra nos documentos base
+    if metadata_extra:
+        for doc in documentos:
+            doc.metadata.update(metadata_extra)
 
     logger.info(
         "[BUILD_INDEX][%s] Texto base carregado | paginas=%d | tempo=%.2fs",
@@ -201,6 +261,8 @@ def build_index(temp_path: str, filename: str, uc: str, chunk_size: int, chunk_o
     # 6) Manifest Seguro
     manifest = {
         "uc": uc,
+        "context_id": metadata_extra.get("context_id") if metadata_extra else None,
+        "context_type": metadata_extra.get("context_type") if metadata_extra else None,
         "filename": clean_filename,
         "version": temp_id,
         "updated_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
@@ -210,6 +272,9 @@ def build_index(temp_path: str, filename: str, uc: str, chunk_size: int, chunk_o
     manifest_path = db_path / MANIFEST_FILE
     with manifest_path.open("w", encoding="utf-8") as f:
         json.dump(manifest, f, ensure_ascii=False, indent=2)
+
+    # Sincronização com HF Hub (best-effort, não bloqueia em caso de falha)
+    _sincronizar_uc_para_hub(uc, db_path)
 
     logger.info(
         "[BUILD_INDEX][%s] Fim | tempo_total=%.2fs",

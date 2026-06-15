@@ -7,6 +7,8 @@ import time
 import secrets
 import fitz  # PyMuPDF para validação segura
 import aiofiles
+from typing import Annotated
+from pathlib import Path
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, Query
 from fastapi.security import APIKeyHeader
 
@@ -20,6 +22,7 @@ from core.cache import (
 )
 from core.utils import limpar_nome_uc
 from core.ml_models import executor
+from core.security import verificar_token_interno # <-- IMPORTAÇÃO ADICIONADA AQUI
 from services.ingestao import build_index
 
 router = APIRouter()
@@ -93,14 +96,26 @@ async def apagar_conteudo_uc(
             detail="Confirmação de segurança ausente ou inválida. Parâmetro confirmacao=APAGAR é obrigatório."
         )
 
-    uc_limpa = limpar_nome_uc(uc)
-    db_path = os.path.join(settings.base_faiss_dir, uc_limpa)
+    uc_limpa = limpar_nome_uc(uc).strip()
+
+    if not uc_limpa:
+        raise HTTPException(status_code=400, detail="Nome de UC invalido.")
+
+    base_faiss = Path(settings.base_faiss_dir).resolve()
+    db_path = (base_faiss / uc_limpa).resolve()
+
+    if db_path == base_faiss:
+        raise HTTPException(status_code=403, detail="Caminho FAISS inseguro.")
+
+    if base_faiss not in db_path.parents:
+        raise HTTPException(status_code=403, detail="Caminho FAISS fora da pasta permitida.")
+
     logger.warning("### DELETE DESTRUTIVO ATIVADO ### uc=%s", uc_limpa)
 
     faiss_removido = False
     pdfs_removidos = 0
 
-    if os.path.exists(db_path):
+    if db_path.exists():
         shutil.rmtree(db_path)
         faiss_removido = True
         logger.info("[DELETE] Pasta FAISS removida: %s", db_path)
@@ -139,14 +154,32 @@ def _verificar_pdf_integro(caminho_pdf: str) -> None:
         raise ValueError(f"Ficheiro PDF malformado ou corrompido.")
 
 
-@router.post("/ingestao", dependencies=[Depends(exigir_professor)], tags=["Professores"])
+@router.post("/ingestao", dependencies=[Depends(verificar_token_interno)], tags=["Professores"])
 async def ingestao(
     uc: str = Form(...),
     chunk_size: int = Form(1200),
     chunk_overlap: int = Form(250),
     files: list[UploadFile] = File(...),
+    context_id: Annotated[int | None, Form()] = None,
+    context_type: Annotated[str | None, Form()] = None,
+    material_id: Annotated[int | None, Form()] = None,
+    section_id: Annotated[int | None, Form()] = None,
+    source: Annotated[str | None, Form()] = "official",
+    verified: Annotated[bool, Form()] = True,
+    ingestion_id: Annotated[int | None, Form()] = None,
 ):
+    if not getattr(settings, "ingestion_enabled", True):
+        logger.warning("[INGESTAO] Pedido bloqueado: ingestion_enabled=false")
+        raise HTTPException(status_code=403, detail="Ingestao desativada por configuracao.")
+
     t0_total = time.perf_counter()
+
+    # Validar metadados obrigatórios (alerta se faltarem, mas não bloqueia para compatibilidade)
+    if context_id is None or context_type is None or material_id is None:
+        logger.warning(
+            "[INGESTAO] Metadados estruturais em falta: context_id=%s, context_type=%s, material_id=%s",
+            context_id, context_type, material_id
+        )
 
     # 1. Validações Iniciais (Prevenção de DoS)
     if len(files) > MAX_FILES_PER_UPLOAD:
@@ -232,6 +265,15 @@ async def ingestao(
                     uc_limpa,
                     chunk_size,
                     chunk_overlap,
+                    {
+                        "context_id": context_id,
+                        "context_type": context_type,
+                        "material_id": material_id,
+                        "section_id": section_id,
+                        "source": source,
+                        "verified": verified,
+                        "ingestion_id": ingestion_id,
+                    }
                 )
 
                 resultados.append({"ficheiro": clean_filename, "status": "sucesso", "chunks": total_chunks})

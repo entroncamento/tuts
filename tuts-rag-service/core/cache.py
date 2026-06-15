@@ -5,12 +5,10 @@ import uuid
 from collections import defaultdict
 
 import numpy as np
-import redis.asyncio as redis
+# Redis removido para deploy no HF Spaces
+# import redis.asyncio as redis
 from langchain_community.retrievers import BM25Retriever
 from langchain_community.vectorstores import FAISS
-from redis.commands.search.field import TagField, TextField, VectorField
-from redis.commands.search.index_definition import IndexDefinition, IndexType
-from redis.commands.search.query import Query
 
 from config import MANIFEST_FILE, logger, settings
 from core.utils import limpar_nome_uc, resolver_pasta_faiss_uc
@@ -24,16 +22,9 @@ _cache_locks: dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
 _ingestao_locks: dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
 
 
-# ── REDIS ────────────────────────────────────────────────────────────────────
+# ── REDIS (DESATIVADO) ───────────────────────────────────────────────────────
 
-redis_client = redis.Redis(
-    host=settings.redis_host,
-    port=settings.redis_port,
-    password=getattr(settings, "redis_password", None),
-    db=getattr(settings, "redis_db", 0),
-    ssl=getattr(settings, "redis_ssl", False),
-    decode_responses=False,
-)
+redis_client = None
 
 # paraphrase-multilingual-MiniLM-L12-v2 usa 384 dimensões
 EMBEDDING_DIM = int(getattr(settings, "embedding_dim", 384))
@@ -42,15 +33,12 @@ EMBEDDING_DIM = int(getattr(settings, "embedding_dim", 384))
 INDEX_NAME = "idx:semantic_cache_v3"
 CACHE_PREFIX = "cache_v3:"
 
-redis_cache_disponivel = True
+redis_cache_disponivel = False
 
 
 async def fechar_conexoes() -> None:
     """Fecha ligações Redis no shutdown da app."""
-    try:
-        await redis_client.aclose()
-    except Exception:
-        pass
+    pass
 
 
 def _normalizar_uc_cache(uc: str) -> str:

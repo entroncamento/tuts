@@ -1,53 +1,47 @@
 # Ambientes virtuais Python
-**/venv/
-**/env/
-**/.venv/
+venv/
+env/
+.venv/
 
 # Variáveis de ambiente / secrets
 .env
 .env.*
-**/.env
-**/.env.*
-**/credentials.json
-**/token.json
+credentials.json
+token.json
 
-# Cache do Python
-**/__pycache__/
-**/*.pyc
-**/.pytest_cache/
+# Cache Python
+__pycache__/
+*.pyc
+.pytest_cache/
 
-# Bases de dados e índices locais/pesados
-**/tuts_logs.db
-**/*.sqlite
-**/*.db
-**/faiss_db/
-**/database/data/
+# Bases de dados e índices locais
+tuts_logs.db
+*.sqlite
+*.db
+faiss_db/
+database/data/
 
 # Dependências
-**/node_modules/
-**/vendor/
+node_modules/
+vendor/
 
 # Builds/cache
-**/dist/
-**/public/build/
-**/storage/logs/
-**/storage/framework/cache/
-**/storage/framework/views/*
-!**/storage/framework/views/.gitignore
-**/bootstrap/cache/*
+dist/
+public/build/
+storage/logs/*
+storage/framework/cache/
+storage/framework/views/*
+!storage/framework/views/.gitignore
+bootstrap/cache/*
 
-# Laravel / Vite locais
+# Laravel / Vite
 /public/hot
 /public/storage
-/public/C:*
 
-# PDFs / ficheiros gerados locais
-**/pdfs/
+# PDFs
+pdfs/
 
-# Windows / WSL lixo
+# Windows / WSL
 *Zone.Identifier
 Thumbs.db
 .DS_Store
-
-# ficheiros de debug / árvore
-tree_tuts_core.txt

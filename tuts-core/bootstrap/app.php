@@ -20,7 +20,12 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
 
         $middleware->api(prepend: [
+            \App\Http\Middleware\RequestTracing::class,
             \Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class,
+        ]);
+
+        $middleware->web(prepend: [
+            \App\Http\Middleware\RequestTracing::class,
         ]);
 
         // ── REGISTO DE ALIASES (SEGURANÇA) ───────────────────────────────────
@@ -28,12 +33,13 @@ return Application::configure(basePath: dirname(__DIR__))
         // à classe física do Middleware que fará a verificação do Token/IP.
         $middleware->alias([
             'internal.api' => \App\Http\Middleware\VerifyInternalApiToken::class,
+            'metrics' => \App\Http\Middleware\MetricsMiddleware::class,
         ]);
 
         // ── SECURITY HEADERS GLOBAIS ─────────────────────────────────────────
         // Em produção, deves criar e adicionar um middleware global para 
         // injetar headers como X-Frame-Options, Strict-Transport-Security, etc.
-        // $middleware->append(\App\Http\Middleware\SecurityHeaders::class);
+        $middleware->append(\App\Http\Middleware\SecurityHeaders::class);
 
         $middleware->statefulApi();
     })

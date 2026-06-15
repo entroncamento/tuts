@@ -24,11 +24,31 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Vite::prefetch(concurrency: 3);
+        
+        if (config('app.env') === 'production') {
+            \Illuminate\Support\Facades\URL::forceScheme('https');
+        }
+
         \Illuminate\Support\Facades\URL::forceRootUrl(config('app.url'));
+
+        // Limite para comunicação interna (RAG <-> Laravel)
         RateLimiter::for('internal', function (Request $request) {
-            return Limit::perMinute(120)->by(
-                $request->header('X-Internal-Token') ?: $request->ip()
-            );
+            return Limit::perMinute(200)->by($request->header('X-Internal-Token') ?: $request->ip());
+        });
+
+        // Limite para criação de chats (Proteção contra Spam)
+        RateLimiter::for('chat.create', function (Request $request) {
+            return Limit::perMinute(10)->by($request->user()?->id ?: $request->ip());
+        });
+
+        // Limite para perguntas via Stream (IA custa dinheiro/recursos)
+        RateLimiter::for('chat.stream', function (Request $request) {
+            return Limit::perMinute(15)->by($request->user()?->id ?: $request->ip());
+        });
+
+        // Limite geral da API
+        RateLimiter::for('api', function (Request $request) {
+            return Limit::perMinute(60)->by($request->user()?->id ?: $request->ip());
         });
     }
 }

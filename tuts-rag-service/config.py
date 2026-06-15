@@ -1,7 +1,10 @@
+import os
 import logging
+import json
 from enum import Enum
 from pathlib import Path
 from typing import Optional
+from contextvars import ContextVar
 
 from dotenv import load_dotenv
 from pydantic import field_validator, model_validator
@@ -21,11 +24,43 @@ MANIFEST_FILE = "manifest.json"
 
 
 # ── LOGGING ───────────────────────────────────────────────────────────────────
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
-    datefmt="%Y-%m-%dT%H:%M:%S",
-)
+
+request_id_ctx: ContextVar[Optional[str]] = ContextVar("request_id", default=None)
+
+class JsonFormatter(logging.Formatter):
+    def format(self, record):
+        log_record = {
+            "timestamp": self.formatTime(record, self.datefmt),
+            "level": record.levelname,
+            "name": record.name,
+            "message": record.getMessage(),
+            "module": record.module,
+            "func": record.funcName,
+            "request_id": request_id_ctx.get(),
+        }
+        if record.exc_info:
+            log_record["exception"] = self.formatException(record.exc_info)
+        return json.dumps(log_record)
+
+def setup_logging(env: str):
+    root_logger = logging.getLogger()
+    
+    # Limpar handlers existentes
+    for handler in root_logger.handlers[:]:
+        root_logger.removeHandler(handler)
+
+    handler = logging.StreamHandler()
+    
+    if env == "production":
+        handler.setFormatter(JsonFormatter(datefmt="%Y-%m-%dT%H:%M:%S"))
+    else:
+        handler.setFormatter(logging.Formatter(
+            fmt="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+            datefmt="%Y-%m-%dT%H:%M:%S"
+        ))
+    
+    root_logger.addHandler(handler)
+    root_logger.setLevel(logging.INFO)
 
 logger = logging.getLogger("tuts")
 
@@ -72,19 +107,18 @@ class Settings(BaseSettings):
     # ── ORIGENS / URLS ────────────────────────────────────────────────────────
     frontend_origin: str = "http://localhost:5173,http://127.0.0.1:5173"
     laravel_url: str = "http://127.0.0.1:8000"
+    internal_allowed_hosts: str = ""
 
     # ── PATHS ─────────────────────────────────────────────────────────────────
     uc_json_path: str = str(BASE_DIR / "database" / "data" / "cadeiras_mtc.json")
     base_faiss_dir: str = str(BASE_DIR / "faiss_db")
     sqlite_db: str = str(BASE_DIR / "tuts_logs.db")
 
-    pdf_storage_dir: str = str(
-        LARAVEL_ROOT / "storage" / "app" / "public" / "pdfs"
-    )
+    pdf_storage_dir: str = os.getenv("PDF_STORAGE_DIR", str(BASE_DIR / "pdfs") if not (LARAVEL_ROOT / "storage").exists() else str(LARAVEL_ROOT / "storage" / "app" / "public" / "pdfs"))
 
     service_account_file: str = str(BASE_DIR / "service_account.json")
 
-      # ── RETRIEVAL / OCR / INGESTÃO ────────────────────────────────────────────
+    # ── RETRIEVAL / OCR / INGESTÃO ────────────────────────────────────────────
     faiss_k: int = 8
     bm25_k: int = 6
     final_k: int = 3
@@ -100,27 +134,26 @@ class Settings(BaseSettings):
     semantic_cache_threshold: float = 0.92
 
     # Cache semântica
-    semantic_cache_enabled: bool = True
+    semantic_cache_enabled: bool = False
+    embedding_dim: int = 384
+    ingestion_enabled: bool = True
 
     # Buffer SSE para não enviar chunks demasiado pequenos
     sse_buffer_chars: int = 180
 
-       # Modelos locais
+    # Modelos locais
     embedding_model: str = "paraphrase-multilingual-MiniLM-L12-v2"
     reranker_model: str = "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"
     rrf_k: int = 60
+    ia_http_timeout_s: float = 20.0
+    ia_http_read_timeout_s: float = 120.0
+    ia_bg_max_tokens: int = 280
+    ia_chat_max_tokens: int = 1200
+    ia_fallback_max_tokens: int = 900
 
     # ── SERVIDOR ──────────────────────────────────────────────────────────────
     server_host: str = "127.0.0.1"
     server_port: int = 8001
-
-    # ── REDIS ─────────────────────────────────────────────────────────────────
-    redis_host: str = "127.0.0.1"
-    redis_port: int = 6379
-    redis_password: Optional[str] = None
-    redis_ssl: bool = False
-    redis_db: int = 0
-    redis_cache_ttl_dias: int = 7
 
     # ── FEATURES ──────────────────────────────────────────────────────────────
     expose_public_pdfs: bool = False
@@ -141,15 +174,24 @@ class Settings(BaseSettings):
                     "CRITICAL: expose_public_pdfs não pode estar True em produção."
                 )
 
+            if not self.professor_api_key:
+                raise ValueError(
+                    "CRITICAL: professor_api_key e obrigatorio em producao."
+                )
+
+            if not self.ingestion_enabled:
+                logger.info("Ingestao desativada por configuracao em producao.")
+
+            if not self.internal_allowed_hosts.strip():
+                logger.warning(
+                    "ATENCAO: internal_allowed_hosts vazio em producao. "
+                    "A seguranca depende do X-Internal-Token e da rede privada."
+                )
+
             if self.server_host == "0.0.0.0":
                 logger.warning(
                     "ATENÇÃO: server_host está 0.0.0.0 em produção. "
                     "Garante que está atrás de rede privada/reverse proxy."
-                )
-
-            if not self.redis_password and self.redis_host != "127.0.0.1":
-                logger.warning(
-                    "ATENÇÃO: Redis remoto configurado sem password em produção."
                 )
 
         return self
@@ -157,6 +199,7 @@ class Settings(BaseSettings):
 
 try:
     settings = Settings()
+    setup_logging(settings.app_env)
 except Exception as exc:
     raise RuntimeError(f"CRITICAL: Configuração inválida — {exc}") from exc
 

@@ -1,0 +1,270 @@
+services:
+  # ── LARAVEL BACKEND (FrankenPHP / Octane) ──────────────────────────────────
+  laravel:
+    build:
+      context: ./tuts-core
+      dockerfile: Dockerfile.prod
+    container_name: tuts-laravel
+    restart: unless-stopped
+    depends_on:
+      pgsql:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    environment:
+      APP_ENV: production
+      APP_DEBUG: "false"
+      APP_URL: ${APP_URL:-http://localhost}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost}
+      LOG_CHANNEL: json_stderr
+      SESSION_DRIVER: redis
+      SESSION_DOMAIN: ${SESSION_DOMAIN:-}
+      SESSION_SECURE_COOKIE: "true"
+      SESSION_SAME_SITE: lax
+      SANCTUM_STATEFUL_DOMAINS: ${SANCTUM_STATEFUL_DOMAINS:-localhost}
+      # Laravel / RAG
+      GROQ_API_KEY: ${GROQ_API_KEY}
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN}
+      PROFESSOR_API_KEY: ${PROFESSOR_API_KEY}
+
+      # DB
+      DB_CONNECTION: pgsql
+      DB_HOST: pgsql
+      DB_PORT: 5432
+      DB_DATABASE: ${DB_DATABASE:-tuts}
+      DB_USERNAME: ${DB_USERNAME:-tuts_user}
+      DB_PASSWORD: ${DB_PASSWORD:-mudar_em_producao}
+
+      # Redis
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+
+      # Python service
+      PYTHON_API_URL: http://rag:8001/perguntar
+      PYTHON_HOST: rag
+      PYTHON_INTERNAL_TOKEN: ${INTERNAL_TOKEN}
+
+      # Octane
+      OCTANE_SERVER: frankenphp
+
+    volumes:
+      - tuts-storage:/app/storage
+      - tuts-pdfs:/app/storage/app/public/pdfs
+
+    ports:
+      - "80:80"
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/up"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - tuts-network
+
+  # ── LARAVEL WORKER (Queues) ────────────────────────────────────────────────
+  worker:
+    build:
+      context: ./tuts-core
+      dockerfile: Dockerfile.prod
+    container_name: tuts-worker
+    restart: unless-stopped
+    depends_on:
+      pgsql:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    environment:
+      APP_ENV: production
+      APP_DEBUG: "false"
+      DB_CONNECTION: pgsql
+      DB_HOST: pgsql
+      DB_PORT: 5432
+      DB_DATABASE: ${DB_DATABASE:-tuts}
+      DB_USERNAME: ${DB_USERNAME:-tuts_user}
+      DB_PASSWORD: ${DB_PASSWORD:-mudar_em_producao}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      QUEUE_CONNECTION: redis
+    volumes:
+      - tuts-storage:/app/storage
+    command: ["/usr/bin/supervisord", "-c", "/app/supervisord.conf"]
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - tuts-network
+
+  # ── PYTHON RAG SERVICE (FastAPI + Gunicorn) ────────────────────────────────
+  rag:
+    build:
+      context: ./tuts-rag-service
+      dockerfile: Dockerfile
+    container_name: tuts-rag
+    restart: unless-stopped
+
+    depends_on:
+      redis:
+        condition: service_started
+
+    environment:
+      APP_ENV: production
+
+      # Keys
+      GROQ_API_KEY: ${GROQ_API_KEY}
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN}
+      PROFESSOR_API_KEY: ${PROFESSOR_API_KEY}
+
+      # Bootstrap
+      BOOTSTRAP_FAISS_URL: ${BOOTSTRAP_FAISS_URL:-}
+
+      # Redis
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+
+      # URLs
+      FRONTEND_ORIGIN: http://localhost,http://127.0.0.1,http://localhost:5173
+      LARAVEL_URL: http://laravel:80
+
+      # Paths
+      BASE_FAISS_DIR: /app/faiss_db
+
+    volumes:
+      - tuts-faiss:/app/faiss_db
+      - tuts-pdfs:/app/pdfs
+
+    ports:
+      - "8001:8001"
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - tuts-network
+
+  # ── BASE DE DADOS (PostgreSQL) ─────────────────────────────────────────────
+  pgsql:
+    image: postgres:16-alpine
+    container_name: tuts-db
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_DB: ${DB_DATABASE:-tuts}
+      POSTGRES_USER: ${DB_USERNAME:-tuts_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-mudar_em_producao}
+
+    volumes:
+      - tuts-db-data:/var/lib/postgresql/data
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${DB_USERNAME:-tuts_user} -d ${DB_DATABASE:-tuts}",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+    ports:
+      - "5432:5432"
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - tuts-network
+
+  # ── REDIS ───────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: tuts-redis
+    restart: unless-stopped
+
+    volumes:
+      - tuts-redis-data:/data
+
+    ports:
+      - "6379:6379"
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - tuts-network
+
+  # ── MONITORIZAÇÃO (Prometheus & Grafana) ──────────────────────────────────
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: tuts-prometheus
+    restart: unless-stopped
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - tuts-prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - tuts-network
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: tuts-grafana
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - tuts-grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - tuts-network
+
+networks:
+  tuts-network:
+    driver: bridge
+
+volumes:
+  tuts-db-data:
+  tuts-redis-data:
+  tuts-storage:
+  tuts-faiss:
+  tuts-pdfs:
+  tuts-prometheus-data:
+  tuts-grafana-data:

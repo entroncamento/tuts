@@ -8,12 +8,20 @@ use App\Models\Message;
 use App\Models\SpaceFolder;
 use App\Models\StudySpace;
 use App\Models\Subject;
+use App\Services\RagService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
 class ChatController extends Controller
 {
+    protected $ragService;
+
+    public function __construct(RagService $ragService)
+    {
+        $this->ragService = $ragService;
+    }
+
     private function buildHistorico(int $chat_id): string
     {
         return Message::where('chat_id', $chat_id)
@@ -217,6 +225,10 @@ class ChatController extends Controller
         $threadId = (string) $chatId;
         $historico = $this->buildHistorico($chatId);
 
+        if (!$this->ragService->isAvailable()) {
+            abort(503, 'O serviço de IA está temporariamente indisponível (Circuit Breaker).');
+        }
+
         $imagemPath = null;
         $imagemNome = null;
         $imagemMime = null;
@@ -228,8 +240,8 @@ class ChatController extends Controller
             $imagemMime = $file->getMimeType() ?? 'image/jpeg';
         }
 
-        $urlPython = config('services.python.url', 'http://127.0.0.1:8001/perguntar');
-        $internalToken = trim((string) config('services.python.internal_token', ''));
+        $urlPython = $this->ragService->getUrl();
+        $internalToken = $this->ragService->getToken();
 
         if ($internalToken === '') {
             abort(500, 'Configuração crítica: Token interno do serviço IA não configurado.');
@@ -284,13 +296,20 @@ class ChatController extends Controller
             $imagemMime,
             $userMessageId
         ) {
+            // Prevenir interrupção prematura do script pelo PHP
+            ignore_user_abort(true);
+
             while (ob_get_level() > 0) {
                 ob_end_clean();
             }
 
+            // Enviar ID do chat imediatamente
             echo 'data: ' . json_encode([
                 'chat_id' => $chatId,
             ], JSON_UNESCAPED_UNICODE) . "\n\n";
+
+            // Heartbeat inicial
+            echo ": heartbeat\n\n";
 
             @ob_flush();
             flush();
@@ -310,7 +329,8 @@ class ChatController extends Controller
 
             $buffer = '';
             $fullAiText = '';
-            $responseCode = 0;
+            $lastHeartbeat = microtime(true);
+            $requestId = \Illuminate\Support\Facades\Context::get('request_id');
 
             $ch = curl_init($urlPython);
 
@@ -320,15 +340,24 @@ class ChatController extends Controller
                 CURLOPT_HTTPHEADER => [
                     'Accept: text/event-stream',
                     'X-Internal-Token: ' . $internalToken,
+                    'X-Request-ID: ' . $requestId,
                 ],
                 CURLOPT_RETURNTRANSFER => false,
                 CURLOPT_FOLLOWLOCATION => false,
-                CURLOPT_CONNECTTIMEOUT => 10,
-                CURLOPT_TIMEOUT => 60,
+                CURLOPT_CONNECTTIMEOUT => 15,
+                CURLOPT_TIMEOUT => 120, // Aumentado para streams longos
 
-                CURLOPT_WRITEFUNCTION => function ($curl, $chunk) use (&$buffer, &$fullAiText) {
+                CURLOPT_WRITEFUNCTION => function ($curl, $chunk) use (&$buffer, &$fullAiText, &$lastHeartbeat) {
                     if (connection_aborted()) {
-                        return 0;
+                        return 0; // Para o cURL se o cliente desconectar
+                    }
+
+                    // Enviar heartbeat a cada 15 segundos se não houver chunks
+                    if (microtime(true) - $lastHeartbeat > 15) {
+                        echo ": heartbeat\n\n";
+                        @ob_flush();
+                        flush();
+                        $lastHeartbeat = microtime(true);
                     }
 
                     $buffer .= $chunk;
@@ -360,6 +389,7 @@ class ChatController extends Controller
                         echo "data: {$payload}\n\n";
                         @ob_flush();
                         flush();
+                        $lastHeartbeat = microtime(true);
                     }
 
                     return strlen($chunk);
@@ -369,6 +399,19 @@ class ChatController extends Controller
             $ok = curl_exec($ch);
             $responseCode = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
             $curlError = curl_error($ch);
+
+            if ($ok === false || $responseCode >= 400) {
+                $this->ragService->reportFailure();
+            } else {
+                $this->ragService->reportSuccess();
+            }
+
+            if ($curlError) {
+                \Illuminate\Support\Facades\Log::error("Erro cURL ao comunicar com RAG: " . $curlError, [
+                    'url' => $urlPython,
+                    'chat_id' => $chatId
+                ]);
+            }
 
             curl_close($ch);
 

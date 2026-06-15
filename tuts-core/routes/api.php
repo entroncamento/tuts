@@ -2,7 +2,21 @@
 
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\InternalMessageController;
+use App\Http\Controllers\Api\HealthController;
 use Illuminate\Support\Facades\Route;
+
+/*
+|--------------------------------------------------------------------------
+| API: Rotas de Saúde (Healthchecks)
+|--------------------------------------------------------------------------
+*/
+Route::get('/health/live', [HealthController::class, 'live']);
+Route::get('/health/ready', [HealthController::class, 'ready']);
+Route::get('/health', [HealthController::class, 'health']);
+
+Route::middleware('metrics')->get('/metrics', function () {
+    return response('laravel_app_up 1', 200)->header('Content-Type', 'text/plain');
+});
 
 /*
 |--------------------------------------------------------------------------

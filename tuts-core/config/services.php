@@ -38,7 +38,12 @@ return [
 
     'python' => [
         'url'            => env('PYTHON_API_URL', 'http://127.0.0.1:8001/perguntar'),
+        'url_health'     => env('PYTHON_HEALTH_URL', 'http://rag:8001/health'),
         'internal_token' => env('PYTHON_INTERNAL_TOKEN'),
+    ],
+
+    'metrics' => [
+        'token' => env('METRICS_TOKEN'),
     ],
 
 ];

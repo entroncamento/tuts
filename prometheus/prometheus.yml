@@ -1,0 +1,20 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'laravel'
+    metrics_path: '/api/metrics'
+    static_configs:
+      - targets: ['laravel:80']
+    # If using token, we need custom scrape config or relay
+    # For now, relying on internal network access allowed in MetricsMiddleware
+
+  - job_name: 'rag-service'
+    metrics_path: '/health' # Or a dedicated metrics endpoint if added later
+    static_configs:
+      - targets: ['rag:8001']
+
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']

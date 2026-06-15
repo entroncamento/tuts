@@ -3,6 +3,7 @@ import asyncio
 from pathlib import Path
 from collections import defaultdict
 
+from typing import Any, Callable
 from langchain_community.vectorstores import FAISS
 from langchain_community.retrievers import BM25Retriever
 from config import settings, FAISS_INDEX_FILE, logger
@@ -88,14 +89,100 @@ def _rrf_fusion(listas: list[list], k: int = 60) -> list:
     return [doc_index[chave] for chave, _ in ordenados]
 
 
-async def executar_retrieval(queries: list[str], vs: FAISS, bm25: BM25Retriever, faiss_k: int) -> tuple[list, float]:
+def _detectar_index_legacy(docs: list) -> bool:
+    """
+    Verifica se o índice é antigo (sem metadados estruturais).
+    Inspeciona o primeiro documento para procurar 'material_id'.
+    """
+    if not docs:
+        return False
+    
+    # material_id é o nosso marcador de "Índice Rico em Metadados"
+    return "material_id" not in docs[0].metadata
+
+
+def _construir_filtro_metadata(filters: dict | None) -> Callable | None:
+    """
+    Constrói um callable de filtragem para o FAISS/BM25.
+    Suporta correspondência exata e listas (IN).
+    """
+    if not filters:
+        return None
+
+    def filter_func(metadata: dict) -> bool:
+        for key, value in filters.items():
+            if key not in metadata:
+                return False
+            
+            meta_val = metadata[key]
+            
+            # Suporte para listas (Equivalente a $in)
+            if isinstance(value, list):
+                if meta_val not in value:
+                    return False
+            # Suporte para correspondência exata
+            elif meta_val != value:
+                return False
+        return True
+
+    return filter_func
+
+
+async def executar_retrieval(
+    queries: list[str], 
+    vs: FAISS, 
+    bm25_full: BM25Retriever | None, 
+    faiss_k: int,
+    filters: dict | None = None
+) -> tuple[list, float]:
     loop = asyncio.get_running_loop()
     t0 = time.perf_counter()
-    tarefas = []
     
+    # 1. Deteção de Legacy e Preparação de Filtros
+    # Nota: FAISS armazena docs no docstore._dict
+    uc_docs = list(vs.docstore._dict.values())
+    eh_legacy = _detectar_index_legacy(uc_docs)
+    
+    filter_func = None
+    fetch_k = faiss_k # Padrão
+    
+    if filters and not eh_legacy:
+        filter_func = _construir_filtro_metadata(filters)
+        # Aumentamos fetch_k para compensar o search-then-filter do FAISS
+        fetch_k = max(faiss_k * 4, 100) 
+        logger.info("[RETRIEVAL] Filtros ativos: %s | fetch_k=%d", filters, fetch_k)
+    elif filters and eh_legacy:
+        logger.warning("[RETRIEVAL] Índice legacy detetado. Ignorando filtros.")
+
+    # 2. BM25 Dinâmico (Scoped)
+    # Se houver filtros, recriamos um BM25 apenas com o subconjunto de documentos.
+    bm25_efetivo = bm25_full
+    if filter_func:
+        docs_filtrados = [d for d in uc_docs if filter_func(d.metadata)]
+        if docs_filtrados:
+            logger.info("[RETRIEVAL] BM25 limitado a %d documentos.", len(docs_filtrados))
+            bm25_efetivo = BM25Retriever.from_documents(docs_filtrados)
+            bm25_efetivo.k = settings.bm25_k
+        else:
+            logger.warning("[RETRIEVAL] Filtros resultaram em 0 documentos. Fallback para UC completa.")
+            filter_func = None # Desativa filtros para o FAISS também
+            fetch_k = faiss_k
+
+    tarefas = []
     for q in queries:
-        tarefas.append(loop.run_in_executor(executor, vs.similarity_search, q, faiss_k))
-        tarefas.append(loop.run_in_executor(executor, bm25.invoke, q))
+        # FAISS com pré-filtragem (via callable)
+        tarefas.append(loop.run_in_executor(
+            executor, 
+            vs.similarity_search, 
+            q, 
+            faiss_k,
+            filter_func,
+            fetch_k
+        ))
+        
+        # BM25 (pode ser o full ou o scoped)
+        if bm25_efetivo:
+            tarefas.append(loop.run_in_executor(executor, bm25_efetivo.invoke, q))
         
     resultados = await asyncio.gather(*tarefas)
     docs = _rrf_fusion(list(resultados), k=settings.rrf_k)
