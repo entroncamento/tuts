@@ -4,8 +4,8 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Redis;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Redis;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Http\JsonResponse;
 
@@ -30,7 +30,7 @@ class HealthController extends Controller
             'storage' => $this->checkStorage(),
         ];
 
-        $allOk = !collect($checks)->contains(fn($c) => $c['status'] !== 'ok');
+        $allOk = !collect($checks)->contains(fn($c) => !in_array($c['status'], ['ok', 'skipped'], true));
 
         return response()->json([
             'status' => $allOk ? 'ok' : 'degraded',
@@ -54,7 +54,7 @@ class HealthController extends Controller
         ];
 
         $duration = round((microtime(true) - $startTime) * 1000, 2);
-        $allOk = !collect($checks)->contains(fn($c) => $c['status'] !== 'ok');
+        $allOk = !collect($checks)->contains(fn($c) => !in_array($c['status'], ['ok', 'skipped'], true));
 
         return response()->json([
             'status' => $allOk ? 'ok' : 'degraded',
@@ -80,6 +80,16 @@ class HealthController extends Controller
 
     private function checkRedis(): array
     {
+        if (!$this->redisIsConfigured()) {
+            return [
+                'status' => 'skipped',
+                'message' => 'Redis is not configured for cache, session or queue.',
+                'cache_store' => config('cache.default'),
+                'session_driver' => config('session.driver'),
+                'queue_connection' => config('queue.default'),
+            ];
+        }
+
         try {
             $start = microtime(true);
             Redis::ping();
@@ -90,6 +100,17 @@ class HealthController extends Controller
         } catch (\Exception $e) {
             return ['status' => 'error', 'message' => $e->getMessage()];
         }
+    }
+
+    private function redisIsConfigured(): bool
+    {
+        $cacheStore = config('cache.default');
+        $cacheDriver = config("cache.stores.{$cacheStore}.driver");
+        $sessionDriver = config('session.driver');
+        $queueConnection = config('queue.default');
+        $queueDriver = config("queue.connections.{$queueConnection}.driver");
+
+        return in_array('redis', [$cacheStore, $cacheDriver, $sessionDriver, $queueConnection, $queueDriver], true);
     }
 
     private function checkStorage(): array
