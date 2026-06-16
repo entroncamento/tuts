@@ -55,7 +55,9 @@ COPY --from=node_builder /app/public/build /app/public/build
 # Build-time APP_KEY generation disabled: APP_KEY must be provided as a stable runtime secret.
 
 # permissões
-RUN chown -R www-data:www-data storage bootstrap/cache
+RUN mkdir -p storage/logs storage/framework/cache storage/framework/sessions storage/framework/views bootstrap/cache \
+    && chown -R www-data:www-data storage bootstrap/cache \
+    && chmod -R a+rwX storage bootstrap/cache
 
 ENV OCTANE_SERVER=frankenphp
 
