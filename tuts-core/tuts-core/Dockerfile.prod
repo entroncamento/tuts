@@ -52,15 +52,10 @@ RUN composer install \
 COPY --from=node_builder /app/public/build /app/public/build
 
 # Laravel safety
-RUN if [ ! -f .env ]; then cp .env.example .env; fi && \
-    php artisan config:cache || true && \
-    php artisan route:cache || true && \
-    php artisan view:cache || true
+# Build-time Laravel config cache disabled: runtime env vars must come from the deploy platform.
 
 # APP_KEY safe
-RUN if ! grep -q "APP_KEY=base64:" .env 2>/dev/null; then \
-    php artisan key:generate || true ; \
-    fi
+# Build-time APP_KEY generation disabled: APP_KEY must be provided as a stable runtime secret.
 
 # permissões
 RUN chown -R www-data:www-data storage bootstrap/cache
