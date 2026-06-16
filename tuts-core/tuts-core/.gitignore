@@ -45,3 +45,5 @@ pdfs/
 *Zone.Identifier
 Thumbs.db
 .DS_Store
+# Local FrankenPHP binary
+frankenphp
