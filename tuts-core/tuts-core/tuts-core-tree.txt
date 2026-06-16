@@ -1,0 +1,773 @@
+.
+├── .editorconfig
+├── .env
+├── .env.example
+├── .env.neon.example
+├── .env.production.example
+├── .gitattributes
+├── .gitignore
+├── .vscode
+│   ├── settings.json
+│   └── tasks.json
+├── Dockerfile.prod
+├── README.md
+├── app
+│   ├── Http
+│   │   ├── Controllers
+│   │   │   ├── Api
+│   │   │   │   ├── AuthController.php
+│   │   │   │   ├── ChatController.php
+│   │   │   │   ├── CourseController.php
+│   │   │   │   ├── DashboardController.php
+│   │   │   │   ├── HealthController.php
+│   │   │   │   ├── InternalMessageController.php
+│   │   │   │   ├── NotificationController.php
+│   │   │   │   ├── SpaceFolderController.php
+│   │   │   │   ├── SpaceMaterialController.php
+│   │   │   │   └── StudySpaceController.php
+│   │   │   ├── Auth
+│   │   │   │   ├── AuthenticatedSessionController.php
+│   │   │   │   ├── ConfirmablePasswordController.php
+│   │   │   │   ├── EmailVerificationNotificationController.php
+│   │   │   │   ├── EmailVerificationPromptController.php
+│   │   │   │   ├── NewPasswordController.php
+│   │   │   │   ├── PasswordController.php
+│   │   │   │   ├── PasswordResetLinkController.php
+│   │   │   │   ├── RegisteredUserController.php
+│   │   │   │   └── VerifyEmailController.php
+│   │   │   ├── Controller.php
+│   │   │   └── ProfileController.php
+│   │   ├── Middleware
+│   │   │   ├── HandleInertiaRequests.php
+│   │   │   ├── MetricsMiddleware.php
+│   │   │   ├── RequestTracing.php
+│   │   │   ├── SecurityHeaders.php
+│   │   │   └── VerifyInternalApiToken.php
+│   │   └── Requests
+│   │       ├── Auth
+│   │       │   └── LoginRequest.php
+│   │       └── ProfileUpdateRequest.php
+│   ├── Models
+│   │   ├── Chat.php
+│   │   ├── Course.php
+│   │   ├── Message.php
+│   │   ├── SpaceFolder.php
+│   │   ├── SpaceMaterial.php
+│   │   ├── StudySpace.php
+│   │   ├── Subject.php
+│   │   ├── TutsNotification.php
+│   │   └── User.php
+│   ├── Providers
+│   │   └── AppServiceProvider.php
+│   └── Services
+│       └── RagService.php
+├── artisan
+├── bootstrap
+│   ├── app.php
+│   ├── cache
+│   │   ├── .gitignore
+│   │   ├── packages.php
+│   │   └── services.php
+│   └── providers.php
+├── compose.yaml
+├── composer.json
+├── composer.lock
+├── config
+│   ├── app.php
+│   ├── auth.php
+│   ├── cache.php
+│   ├── cors.php
+│   ├── database.php
+│   ├── filesystems.php
+│   ├── logging.php
+│   ├── mail.php
+│   ├── octane.php
+│   ├── queue.php
+│   ├── sanctum.php
+│   ├── services.php
+│   └── session.php
+├── database
+│   ├── .gitignore
+│   ├── data
+│   │   ├── cadeiras_mtc.json
+│   │   └── cursos_ua.json
+│   ├── database.sqlite
+│   ├── factories
+│   │   └── UserFactory.php
+│   ├── migrations
+│   │   ├── 0001_01_01_000000_create_users_table.php
+│   │   ├── 0001_01_01_000001_create_cache_table.php
+│   │   ├── 0001_01_01_000002_create_jobs_table.php
+│   │   ├── 2026_03_08_003155_create_courses_table.php
+│   │   ├── 2026_03_08_003155_create_subjects_table.php
+│   │   ├── 2026_03_08_003912_create_course_subject_table.php
+│   │   ├── 2026_03_08_125705_create_chats_table.php
+│   │   ├── 2026_03_08_125706_create_messages_table.php
+│   │   ├── 2026_03_13_010535_add_cadeira_id_to_chats_table.php
+│   │   ├── 2026_03_14_000000_add_course_id_to_users_table.php
+│   │   ├── 2026_03_14_123225_create_personal_access_tokens_table.php
+│   │   ├── 2026_04_05_163513_add_meta_data_to_messages_table.php
+│   │   ├── 2026_05_27_000000_add_role_to_users_table.php
+│   │   ├── 2026_06_05_123440_create_tuts_notifications_table.php
+│   │   ├── 2026_06_05_124657_add_missing_fields_to_tuts_notifications_table.php
+│   │   ├── 2026_06_05_150000_create_study_spaces_table.php
+│   │   ├── 2026_06_05_150100_add_space_context_to_chats_table.php
+│   │   ├── 2026_06_05_151000_create_space_materials_table.php
+│   │   ├── 2026_06_05_152000_create_space_folders_table.php
+│   │   ├── 2026_06_05_152100_add_space_folder_id_to_space_materials_table.php
+│   │   └── 2026_06_05_152200_add_space_folder_id_to_chats_table.php
+│   └── seeders
+│       ├── CadeirasSeeder.php
+│       ├── CursosSeeder.php
+│       └── DatabaseSeeder.php
+├── deploy.sh
+├── frankenphp
+├── gerar-tree-core.ps1
+├── jsconfig.json
+├── package-lock.json
+├── package.json
+├── phpunit.xml
+├── postcss.config.js
+├── public
+│   ├── .htaccess
+│   ├── build
+│   │   ├── assets
+│   │   │   ├── AppShell-DtZvnGBi.css
+│   │   │   ├── AppShell-rdv1Drg9.js
+│   │   │   ├── CalendarPage-jBA1pk_B.js
+│   │   │   ├── ChatHubPage-505oZS-h.js
+│   │   │   ├── ChatHubPage-DoyOfikf.css
+│   │   │   ├── DashboardPage-DtSQ6qgF.js
+│   │   │   ├── HomePage-C5YecT7c.js
+│   │   │   ├── HomePage-v_NdhrZJ.css
+│   │   │   ├── MyPlansPage-BHXjCa6H.js
+│   │   │   ├── NotificationsPage-D908wvo5.js
+│   │   │   ├── NotificationsPage-MTaeCFdf.css
+│   │   │   ├── PlaceholderPage-tlggKioe.js
+│   │   │   ├── PlanningPage-CBTEqY89.css
+│   │   │   ├── PlanningPage-Cf1bGMYd.js
+│   │   │   ├── ProfilePage-3tCCPPqQ.css
+│   │   │   ├── ProfilePage-Bvv2Zmzo.js
+│   │   │   ├── SpaceDetailPage-CpJFiYB_.js
+│   │   │   ├── TeacherUcsPage-B6O24_gm.css
+│   │   │   ├── TeacherUcsPage-DIXzxTkB.js
+│   │   │   ├── UCDetailPage-CjeqkZyh.js
+│   │   │   ├── UcsRouteHandler-B7r5-8Mv.js
+│   │   │   ├── WidgetCard.vue_vue_type_script_setup_true_lang-D2QGq0eB.js
+│   │   │   ├── app-BMQBQ5Pi.css
+│   │   │   ├── app-BinQqCIK.js
+│   │   │   ├── app-CwFa1avV.css
+│   │   │   ├── arrow-left-BfFbvXlV.js
+│   │   │   ├── book-open-ANbRi-W6.js
+│   │   │   ├── brain-DLVPPsfi.js
+│   │   │   ├── calendar-BHEXKkDB.js
+│   │   │   ├── calendar-days-DH0VqWu5.js
+│   │   │   ├── check-DHqhJR9g.js
+│   │   │   ├── chevron-right-CbQG5Cad.js
+│   │   │   ├── clock-4pIQxnW2.js
+│   │   │   ├── createLucideIcon-xMeNKfZO.js
+│   │   │   ├── ellipsis-vertical-Bvi1b5bZ.js
+│   │   │   ├── eye-I2K7oPja.js
+│   │   │   ├── file-text-6OIFDzxs.js
+│   │   │   ├── folder-BPQwzAua.js
+│   │   │   ├── folder-plus-CEf2GVEa.js
+│   │   │   ├── message-circle-CGHIbKVq.js
+│   │   │   ├── message-square-B4hxNg03.js
+│   │   │   ├── plus-u6gljgQb.js
+│   │   │   ├── refresh-ccw-DM03qsKo.js
+│   │   │   ├── send-DEZw0c5d.js
+│   │   │   ├── spaces-B8x58-Y-.js
+│   │   │   ├── sparkles-CVwJmEBn.js
+│   │   │   ├── subjects-RDQGnm2W.js
+│   │   │   ├── trash-2-DEr6RMSy.js
+│   │   │   ├── triangle-alert-B6NtMZo0.js
+│   │   │   ├── ucData-BLxW-2fd.js
+│   │   │   ├── useNotifications-G0F9aswh.js
+│   │   │   ├── useOutsideClick-4Mm9YEgI.js
+│   │   │   ├── usePlanning-CwmPRoIZ.js
+│   │   │   ├── useTutsChat-CdO1fLrS.js
+│   │   │   ├── users-yID9Z9jx.js
+│   │   │   ├── x-DCgFH_yB.js
+│   │   │   └── zap-BKhzQJf9.js
+│   │   └── manifest.json
+│   ├── favicon.ico
+│   ├── frankenphp-worker.php
+│   ├── index.php
+│   ├── pdfs
+│   │   ├── Teoria_da_Comunicacao_Resumo_TC.pdf
+│   │   └── Teoria_da_Comunicacao_Resumos_-_1_TC.pdf
+│   └── robots.txt
+├── query
+├── reminder,
+├── resources
+│   ├── css
+│   │   └── app.css
+│   ├── js
+│   │   ├── Components
+│   │   │   ├── ApplicationLogo.vue
+│   │   │   ├── Checkbox.vue
+│   │   │   ├── DangerButton.vue
+│   │   │   ├── Dropdown.vue
+│   │   │   ├── DropdownLink.vue
+│   │   │   ├── InputError.vue
+│   │   │   ├── InputLabel.vue
+│   │   │   ├── Modal.vue
+│   │   │   ├── NavLink.vue
+│   │   │   ├── PrimaryButton.vue
+│   │   │   ├── ResponsiveNavLink.vue
+│   │   │   ├── SecondaryButton.vue
+│   │   │   └── TextInput.vue
+│   │   ├── Layouts
+│   │   │   ├── AuthenticatedLayout.vue
+│   │   │   └── GuestLayout.vue
+│   │   ├── Pages
+│   │   │   ├── Auth
+│   │   │   │   ├── ConfirmPassword.vue
+│   │   │   │   ├── ForgotPassword.vue
+│   │   │   │   ├── Login.vue
+│   │   │   │   ├── Register.vue
+│   │   │   │   ├── ResetPassword.vue
+│   │   │   │   └── VerifyEmail.vue
+│   │   │   ├── Profile
+│   │   │   │   ├── Edit.vue
+│   │   │   │   └── Partials
+│   │   │   │       ├── DeleteUserForm.vue
+│   │   │   │       ├── UpdatePasswordForm.vue
+│   │   │   │       └── UpdateProfileInformationForm.vue
+│   │   │   └── TutsNew.vue
+│   │   ├── app
+│   │   │   ├── App.vue
+│   │   │   ├── components
+│   │   │   │   ├── BottomChatInput.vue
+│   │   │   │   ├── CitationPdfModal.vue
+│   │   │   │   ├── ImportMaterialModal.vue
+│   │   │   │   ├── MarkdownMessage.vue
+│   │   │   │   ├── MiniCalendar.vue
+│   │   │   │   ├── NotificationBell.vue
+│   │   │   │   ├── NotificationDropdown.vue
+│   │   │   │   ├── RoleGuard.vue
+│   │   │   │   ├── Sidebar.vue
+│   │   │   │   ├── TopNav.vue
+│   │   │   │   ├── UCCard.vue
+│   │   │   │   ├── WeeklyCalendar.vue
+│   │   │   │   ├── WidgetCard.vue
+│   │   │   │   ├── figma
+│   │   │   │   │   └── ImageWithFallback.vue
+│   │   │   │   └── ui
+│   │   │   │       ├── avatar-fallback.vue
+│   │   │   │       ├── avatar-image.vue
+│   │   │   │       ├── avatar.ts
+│   │   │   │       ├── avatar.vue
+│   │   │   │       ├── badge.ts
+│   │   │   │       ├── badge.vue
+│   │   │   │       ├── button.ts
+│   │   │   │       ├── button.vue
+│   │   │   │       ├── card-action.vue
+│   │   │   │       ├── card-content.vue
+│   │   │   │       ├── card-description.vue
+│   │   │   │       ├── card-footer.vue
+│   │   │   │       ├── card-header.vue
+│   │   │   │       ├── card-title.vue
+│   │   │   │       ├── card.ts
+│   │   │   │       ├── card.vue
+│   │   │   │       ├── checkbox.vue
+│   │   │   │       ├── dialog-close.vue
+│   │   │   │       ├── dialog-content.vue
+│   │   │   │       ├── dialog-description.vue
+│   │   │   │       ├── dialog-footer.vue
+│   │   │   │       ├── dialog-header.vue
+│   │   │   │       ├── dialog-overlay.vue
+│   │   │   │       ├── dialog-portal.vue
+│   │   │   │       ├── dialog-title.vue
+│   │   │   │       ├── dialog-trigger.vue
+│   │   │   │       ├── dialog.ts
+│   │   │   │       ├── dialog.vue
+│   │   │   │       ├── dropdown-menu-checkbox-item.vue
+│   │   │   │       ├── dropdown-menu-content.vue
+│   │   │   │       ├── dropdown-menu-item.vue
+│   │   │   │       ├── dropdown-menu-label.vue
+│   │   │   │       ├── dropdown-menu-portal.vue
+│   │   │   │       ├── dropdown-menu-radio-group.vue
+│   │   │   │       ├── dropdown-menu-radio-item.vue
+│   │   │   │       ├── dropdown-menu-separator.vue
+│   │   │   │       ├── dropdown-menu-shortcut.vue
+│   │   │   │       ├── dropdown-menu-sub-content.vue
+│   │   │   │       ├── dropdown-menu-sub-trigger.vue
+│   │   │   │       ├── dropdown-menu-sub.vue
+│   │   │   │       ├── dropdown-menu-trigger.vue
+│   │   │   │       ├── dropdown-menu.ts
+│   │   │   │       ├── dropdown-menu.vue
+│   │   │   │       ├── input.vue
+│   │   │   │       ├── label.vue
+│   │   │   │       ├── popover-anchor.vue
+│   │   │   │       ├── popover-content.vue
+│   │   │   │       ├── popover-trigger.vue
+│   │   │   │       ├── popover.ts
+│   │   │   │       ├── popover.vue
+│   │   │   │       ├── progress.vue
+│   │   │   │       ├── scroll-area.ts
+│   │   │   │       ├── scroll-area.vue
+│   │   │   │       ├── scroll-bar.vue
+│   │   │   │       ├── select-content.vue
+│   │   │   │       ├── select-group.vue
+│   │   │   │       ├── select-item.vue
+│   │   │   │       ├── select-label.vue
+│   │   │   │       ├── select-scroll-down-button.vue
+│   │   │   │       ├── select-scroll-up-button.vue
+│   │   │   │       ├── select-separator.vue
+│   │   │   │       ├── select-trigger.vue
+│   │   │   │       ├── select-value.vue
+│   │   │   │       ├── select.ts
+│   │   │   │       ├── select.vue
+│   │   │   │       ├── separator.vue
+│   │   │   │       ├── skeleton.vue
+│   │   │   │       ├── switch.vue
+│   │   │   │       ├── tabs-content.vue
+│   │   │   │       ├── tabs-list.vue
+│   │   │   │       ├── tabs-trigger.vue
+│   │   │   │       ├── tabs.ts
+│   │   │   │       ├── tabs.vue
+│   │   │   │       ├── textarea.vue
+│   │   │   │       ├── tooltip-content.vue
+│   │   │   │       ├── tooltip-provider.vue
+│   │   │   │       ├── tooltip-trigger.vue
+│   │   │   │       ├── tooltip.ts
+│   │   │   │       ├── tooltip.vue
+│   │   │   │       └── utils.ts
+│   │   │   ├── composables
+│   │   │   │   ├── useAppRole.ts
+│   │   │   │   ├── useNotifications.ts
+│   │   │   │   ├── useOutsideClick.ts
+│   │   │   │   ├── usePlanning.ts
+│   │   │   │   ├── useShell.ts
+│   │   │   │   ├── useShellHandler.ts
+│   │   │   │   ├── useTheme.ts
+│   │   │   │   └── useTutsChat.ts
+│   │   │   ├── data
+│   │   │   │   └── ucData.ts
+│   │   │   ├── layout
+│   │   │   │   └── AppShell.vue
+│   │   │   ├── pages
+│   │   │   │   ├── Auth
+│   │   │   │   │   └── Login.vue
+│   │   │   │   ├── CalendarPage.vue
+│   │   │   │   ├── ChatHubPage.vue
+│   │   │   │   ├── DashboardPage.vue
+│   │   │   │   ├── HomePage.vue
+│   │   │   │   ├── MyPlansPage.vue
+│   │   │   │   ├── NotificationsPage.vue
+│   │   │   │   ├── PlaceholderPage.vue
+│   │   │   │   ├── PlanningPage.vue
+│   │   │   │   ├── ProfilePage.vue
+│   │   │   │   ├── SpaceDetailPage.vue
+│   │   │   │   ├── TeacherUcsPage.vue
+│   │   │   │   ├── UCDetailPage.vue
+│   │   │   │   ├── UcsRouteHandler.vue
+│   │   │   │   └── UcsSpacesPage.vue
+│   │   │   ├── router
+│   │   │   │   └── index.ts
+│   │   │   ├── services
+│   │   │   │   ├── api.ts
+│   │   │   │   ├── chat.ts
+│   │   │   │   ├── notifications.ts
+│   │   │   │   ├── spaces.ts
+│   │   │   │   └── subjects.ts
+│   │   │   ├── stores
+│   │   │   │   ├── appRole.ts
+│   │   │   │   ├── planning.ts
+│   │   │   │   └── shell.ts
+│   │   │   ├── types
+│   │   │   │   └── index.ts
+│   │   │   └── utils
+│   │   │       └── cn.ts
+│   │   ├── app.js
+│   │   ├── bootstrap.js
+│   │   ├── cadeiras_mtc.json
+│   │   ├── env.d.ts
+│   │   ├── imports
+│   │   │   ├── Frame5005
+│   │   │   │   ├── CalendarioFrame.vue
+│   │   │   │   ├── ChatAnexadoFrame.vue
+│   │   │   │   ├── ChatComeceFrame.vue
+│   │   │   │   ├── Frame5005.vue
+│   │   │   │   ├── HomepageFrame.vue
+│   │   │   │   └── svg-uhtdi.ts
+│   │   │   └── Frame5005.zip
+│   │   └── styles
+│   │       ├── fonts.css
+│   │       ├── index.css
+│   │       ├── tailwind.css
+│   │       └── theme.css
+│   └── views
+│       └── app.blade.php
+├── routes
+│   ├── api.php
+│   ├── auth.php
+│   ├── console.php
+│   └── web.php
+├── storage
+│   ├── app
+│   │   ├── .gitignore
+│   │   ├── private
+│   │   │   ├── .gitignore
+│   │   │   └── space-materials
+│   │   │       └── 1
+│   │   │           └── 1
+│   │   └── public
+│   │       ├── .gitignore
+│   │       └── pdfs
+│   │           ├── Marca__Portfolio_Resumos_MeP.pdf
+│   │           ├── Resumo_TC.pdf
+│   │           ├── Resumos_-_1_TC.pdf
+│   │           ├── Tecnologias_Avancadas_para_Client-side_TACS_Sebenta_2023_merged.pdf
+│   │           ├── Teoria_da_Comunicacao_Resumo_TC.pdf
+│   │           └── Teoria_da_Comunicacao_Resumos_-_1_TC.pdf
+│   ├── framework
+│   │   ├── .gitignore
+│   │   ├── cache
+│   │   │   ├── .gitignore
+│   │   │   └── data
+│   │   │       └── .gitignore
+│   │   ├── sessions
+│   │   │   └── .gitignore
+│   │   ├── testing
+│   │   │   └── .gitignore
+│   │   └── views
+│   │       ├── .gitignore
+│   │       ├── 09ee47cb6b2ead6fe59c09eda6d900b2.php
+│   │       ├── 0cd3f42f50837d1c0987bdb8d9888ff2.php
+│   │       ├── 0d91cc84ca3ef31e353ece892735402b.php
+│   │       ├── 132b834a0a58f1e712afb341f8622879.php
+│   │       ├── 136a7c656d1a0ed4e2d0901fc10aa84a.php
+│   │       ├── 1bbc6102c081b21bf9f2f593a9b0e218.php
+│   │       ├── 25559de93bb3f75197f65d31431cc854.php
+│   │       ├── 25b0d221b0b3a2f9f0f84bf62ea8d4d3.php
+│   │       ├── 26328897c1aa10f79e9e2d0d5329b82e.php
+│   │       ├── 269b0fee0189e73c1136e66adf27750b.php
+│   │       ├── 275c7c02e2528e6029079c885e2d2418.php
+│   │       ├── 2cd01824a837fcbad18f4451278dfa3d.php
+│   │       ├── 419551074a50fbe34ef86a0e07ca7190.php
+│   │       ├── 508f1950e4e8efe8ee069df2bd0b7937.php
+│   │       ├── 5d354b2893d50f9829507cb5db08ec2b.php
+│   │       ├── 6f7d30915538961ccb48e148b50dff1e.php
+│   │       ├── 6f8dc7bde97ea89b8aa5e7e3c794d591.php
+│   │       ├── 7ab7d5c4b4b95b090d192a15c186d211.php
+│   │       ├── 80206a5900f7d9f27081a913e0b15676.php
+│   │       ├── 8200d78d1269662c2e1ba8b7bf12d0c9.php
+│   │       ├── 8b77322ea40de4645844c2e3622c3810.php
+│   │       ├── 8c2da46ec4c83d4f3a4a8806fe1bffb0.php
+│   │       ├── 8d82578c6b7f2296eff92bdd034ec3f8.php
+│   │       ├── 92b723efff48ff59a4baed38fab1e075.php
+│   │       ├── 95e3164b72bdaa6d9137dfc0a56b4aae.php
+│   │       ├── 9745f6a6f3fcc1ddd95648c9a006bc71.php
+│   │       ├── ac4c02a786db2cf28ea74e9136b850c9.php
+│   │       ├── b0160d9ee887b000436a549b742bcf73.php
+│   │       ├── bae129cef9e600352d1c88ca55b5c61c.php
+│   │       ├── be4b983db7afa26600524eadc49be7a1.php
+│   │       ├── bff06be78bce3fed83e9c65b8001e4b4.php
+│   │       ├── c597eabc01b3b531b9dda87258a1b39e.php
+│   │       ├── cacad9aa301188bb671ec61542d90cdf.php
+│   │       ├── cfb3b0d08523933b25d0e9e498df3235.php
+│   │       ├── d1f36e3de69f0a26360ce06ac4b749a6.php
+│   │       ├── d54b4b1eb6bf70ee3b6a52e36ce7e503.php
+│   │       ├── d8023e53ca38edd3353749f456935467.php
+│   │       ├── dd310000961f2d208873a737c27d849a.php
+│   │       ├── ed53e6526bfb3c939b903194d34698dc.php
+│   │       ├── ed6d86ec5660851da9f9a0dad3f4f308.php
+│   │       ├── f188496d5460aa7137f13bb1da4b2db1.php
+│   │       ├── f497199d26d29b5bb4d0007bbb834737.php
+│   │       └── f905b6dee768cbfc0ad33952a263d185.php
+│   └── logs
+│       ├── .gitignore
+│       └── laravel.log
+├── supervisord.conf
+├── tailwind.config.js
+├── tests
+│   ├── Feature
+│   │   ├── Auth
+│   │   │   ├── AuthenticationTest.php
+│   │   │   ├── EmailVerificationTest.php
+│   │   │   ├── PasswordConfirmationTest.php
+│   │   │   ├── PasswordResetTest.php
+│   │   │   ├── PasswordUpdateTest.php
+│   │   │   └── RegistrationTest.php
+│   │   ├── ExampleTest.php
+│   │   └── ProfileTest.php
+│   ├── TestCase.php
+│   └── Unit
+│       └── ExampleTest.php
+├── tuts-core
+│   ├── .editorconfig
+│   ├── .env.example
+│   ├── .gitattributes
+│   ├── .gitignore
+│   ├── README.md
+│   ├── app
+│   │   ├── Http
+│   │   │   ├── Controllers
+│   │   │   │   ├── Api
+│   │   │   │   │   ├── AuthController.php
+│   │   │   │   │   ├── ChatController.php
+│   │   │   │   │   ├── CourseController.php
+│   │   │   │   │   ├── DashboardController.php
+│   │   │   │   │   └── InternalMessageController.php
+│   │   │   │   ├── Auth
+│   │   │   │   │   ├── AuthenticatedSessionController.php
+│   │   │   │   │   ├── ConfirmablePasswordController.php
+│   │   │   │   │   ├── EmailVerificationNotificationController.php
+│   │   │   │   │   ├── EmailVerificationPromptController.php
+│   │   │   │   │   ├── NewPasswordController.php
+│   │   │   │   │   ├── PasswordController.php
+│   │   │   │   │   ├── PasswordResetLinkController.php
+│   │   │   │   │   ├── RegisteredUserController.php
+│   │   │   │   │   └── VerifyEmailController.php
+│   │   │   │   ├── Controller.php
+│   │   │   │   └── ProfileController.php
+│   │   │   ├── Middleware
+│   │   │   │   ├── HandleInertiaRequests.php
+│   │   │   │   └── VerifyInternalApiToken.php
+│   │   │   └── Requests
+│   │   │       ├── Auth
+│   │   │       │   └── LoginRequest.php
+│   │   │       └── ProfileUpdateRequest.php
+│   │   ├── Models
+│   │   │   ├── Chat.php
+│   │   │   ├── Course.php
+│   │   │   ├── Message.php
+│   │   │   ├── Subject.php
+│   │   │   └── User.php
+│   │   └── Providers
+│   │       └── AppServiceProvider.php
+│   ├── artisan
+│   ├── bootstrap
+│   │   ├── app.php
+│   │   ├── cache
+│   │   │   └── .gitignore
+│   │   └── providers.php
+│   ├── compose.yaml
+│   ├── composer.json
+│   ├── composer.lock
+│   ├── config
+│   │   ├── app.php
+│   │   ├── auth.php
+│   │   ├── cache.php
+│   │   ├── cors.php
+│   │   ├── database.php
+│   │   ├── filesystems.php
+│   │   ├── logging.php
+│   │   ├── mail.php
+│   │   ├── octane.php
+│   │   ├── queue.php
+│   │   ├── sanctum.php
+│   │   ├── services.php
+│   │   └── session.php
+│   ├── database
+│   │   ├── .gitignore
+│   │   ├── data
+│   │   │   ├── cadeiras_mtc.json
+│   │   │   └── cursos_ua.json
+│   │   ├── factories
+│   │   │   └── UserFactory.php
+│   │   ├── migrations
+│   │   │   ├── 0001_01_01_000000_create_users_table.php
+│   │   │   ├── 0001_01_01_000001_create_cache_table.php
+│   │   │   ├── 0001_01_01_000002_create_jobs_table.php
+│   │   │   ├── 2026_03_08_003155_create_courses_table.php
+│   │   │   ├── 2026_03_08_003155_create_subjects_table.php
+│   │   │   ├── 2026_03_08_003912_create_course_subject_table.php
+│   │   │   ├── 2026_03_08_125705_create_chats_table.php
+│   │   │   ├── 2026_03_08_125706_create_messages_table.php
+│   │   │   ├── 2026_03_13_010535_add_cadeira_id_to_chats_table.php
+│   │   │   ├── 2026_03_14_000000_add_course_id_to_users_table.php
+│   │   │   ├── 2026_03_14_123225_create_personal_access_tokens_table.php
+│   │   │   └── 2026_04_05_163513_add_meta_data_to_messages_table.php
+│   │   └── seeders
+│   │       ├── CadeirasSeeder.php
+│   │       ├── CursosSeeder.php
+│   │       └── DatabaseSeeder.php
+│   ├── jsconfig.json
+│   ├── package-lock.json
+│   ├── package.json
+│   ├── phpunit.xml
+│   ├── postcss.config.js
+│   ├── public
+│   │   ├── .htaccess
+│   │   ├── Ctuts-workspacetuts-corestorageframeworkviews
+│   │   │   ├── 09ee47cb6b2ead6fe59c09eda6d900b2.php
+│   │   │   ├── 0cd3f42f50837d1c0987bdb8d9888ff2.php
+│   │   │   ├── 0d91cc84ca3ef31e353ece892735402b.php
+│   │   │   ├── 136a7c656d1a0ed4e2d0901fc10aa84a.php
+│   │   │   ├── 1bbc6102c081b21bf9f2f593a9b0e218.php
+│   │   │   ├── 25559de93bb3f75197f65d31431cc854.php
+│   │   │   ├── 25b0d221b0b3a2f9f0f84bf62ea8d4d3.php
+│   │   │   ├── 26328897c1aa10f79e9e2d0d5329b82e.php
+│   │   │   ├── 269b0fee0189e73c1136e66adf27750b.php
+│   │   │   ├── 275c7c02e2528e6029079c885e2d2418.php
+│   │   │   ├── 2cd01824a837fcbad18f4451278dfa3d.php
+│   │   │   ├── 419551074a50fbe34ef86a0e07ca7190.php
+│   │   │   ├── 508f1950e4e8efe8ee069df2bd0b7937.php
+│   │   │   ├── 5d354b2893d50f9829507cb5db08ec2b.php
+│   │   │   ├── 6f7d30915538961ccb48e148b50dff1e.php
+│   │   │   ├── 6f8dc7bde97ea89b8aa5e7e3c794d591.php
+│   │   │   ├── 7ab7d5c4b4b95b090d192a15c186d211.php
+│   │   │   ├── 80206a5900f7d9f27081a913e0b15676.php
+│   │   │   ├── 8200d78d1269662c2e1ba8b7bf12d0c9.php
+│   │   │   ├── 8b77322ea40de4645844c2e3622c3810.php
+│   │   │   ├── 8c2da46ec4c83d4f3a4a8806fe1bffb0.php
+│   │   │   ├── 8d82578c6b7f2296eff92bdd034ec3f8.php
+│   │   │   ├── 92b723efff48ff59a4baed38fab1e075.php
+│   │   │   ├── 95e3164b72bdaa6d9137dfc0a56b4aae.php
+│   │   │   ├── 9745f6a6f3fcc1ddd95648c9a006bc71.php
+│   │   │   ├── ac4c02a786db2cf28ea74e9136b850c9.php
+│   │   │   ├── b0160d9ee887b000436a549b742bcf73.php
+│   │   │   ├── bae129cef9e600352d1c88ca55b5c61c.php
+│   │   │   ├── bff06be78bce3fed83e9c65b8001e4b4.php
+│   │   │   ├── c597eabc01b3b531b9dda87258a1b39e.php
+│   │   │   ├── cacad9aa301188bb671ec61542d90cdf.php
+│   │   │   ├── cfb3b0d08523933b25d0e9e498df3235.php
+│   │   │   ├── d1f36e3de69f0a26360ce06ac4b749a6.php
+│   │   │   ├── d54b4b1eb6bf70ee3b6a52e36ce7e503.php
+│   │   │   ├── d8023e53ca38edd3353749f456935467.php
+│   │   │   ├── dd310000961f2d208873a737c27d849a.php
+│   │   │   ├── ed53e6526bfb3c939b903194d34698dc.php
+│   │   │   ├── ed6d86ec5660851da9f9a0dad3f4f308.php
+│   │   │   ├── f188496d5460aa7137f13bb1da4b2db1.php
+│   │   │   ├── f497199d26d29b5bb4d0007bbb834737.php
+│   │   │   └── f905b6dee768cbfc0ad33952a263d185.php
+│   │   ├── favicon.ico
+│   │   ├── index.php
+│   │   ├── pdfs
+│   │   │   ├── Teoria_da_Comunicacao_Resumo_TC.pdf
+│   │   │   └── Teoria_da_Comunicacao_Resumos_-_1_TC.pdf
+│   │   └── robots.txt
+│   ├── resources
+│   │   ├── css
+│   │   │   └── app.css
+│   │   ├── js
+│   │   │   ├── Components
+│   │   │   │   ├── ApplicationLogo.vue
+│   │   │   │   ├── Checkbox.vue
+│   │   │   │   ├── DangerButton.vue
+│   │   │   │   ├── Dropdown.vue
+│   │   │   │   ├── DropdownLink.vue
+│   │   │   │   ├── InputError.vue
+│   │   │   │   ├── InputLabel.vue
+│   │   │   │   ├── Modal.vue
+│   │   │   │   ├── NavLink.vue
+│   │   │   │   ├── PrimaryButton.vue
+│   │   │   │   ├── ResponsiveNavLink.vue
+│   │   │   │   ├── SecondaryButton.vue
+│   │   │   │   └── TextInput.vue
+│   │   │   ├── Layouts
+│   │   │   │   ├── AuthenticatedLayout.vue
+│   │   │   │   └── GuestLayout.vue
+│   │   │   ├── Pages
+│   │   │   │   ├── Auth
+│   │   │   │   │   ├── ConfirmPassword.vue
+│   │   │   │   │   ├── ForgotPassword.vue
+│   │   │   │   │   ├── Login.vue
+│   │   │   │   │   ├── Register.vue
+│   │   │   │   │   ├── ResetPassword.vue
+│   │   │   │   │   └── VerifyEmail.vue
+│   │   │   │   ├── Dashboard.vue
+│   │   │   │   ├── DashboardProfessor.vue
+│   │   │   │   ├── Login.vue
+│   │   │   │   ├── Profile
+│   │   │   │   │   ├── Edit.vue
+│   │   │   │   │   └── Partials
+│   │   │   │   │       ├── DeleteUserForm.vue
+│   │   │   │   │       ├── UpdatePasswordForm.vue
+│   │   │   │   │       └── UpdateProfileInformationForm.vue
+│   │   │   │   └── Welcome.vue
+│   │   │   ├── app.js
+│   │   │   ├── bootstrap.js
+│   │   │   └── cadeiras_mtc.json
+│   │   └── views
+│   │       └── app.blade.php
+│   ├── routes
+│   │   ├── api.php
+│   │   ├── auth.php
+│   │   ├── console.php
+│   │   └── web.php
+│   ├── storage
+│   │   ├── app
+│   │   │   ├── .gitignore
+│   │   │   ├── private
+│   │   │   │   └── .gitignore
+│   │   │   └── public
+│   │   │       └── .gitignore
+│   │   ├── framework
+│   │   │   ├── .gitignore
+│   │   │   ├── cache
+│   │   │   │   ├── .gitignore
+│   │   │   │   └── data
+│   │   │   │       └── .gitignore
+│   │   │   ├── sessions
+│   │   │   │   └── .gitignore
+│   │   │   ├── testing
+│   │   │   │   └── .gitignore
+│   │   │   └── views
+│   │   │       └── .gitignore
+│   │   └── logs
+│   │       └── .gitignore
+│   ├── tailwind.config.js
+│   ├── tests
+│   │   ├── Feature
+│   │   │   ├── Auth
+│   │   │   │   ├── AuthenticationTest.php
+│   │   │   │   ├── EmailVerificationTest.php
+│   │   │   │   ├── PasswordConfirmationTest.php
+│   │   │   │   ├── PasswordResetTest.php
+│   │   │   │   ├── PasswordUpdateTest.php
+│   │   │   │   └── RegistrationTest.php
+│   │   │   ├── ExampleTest.php
+│   │   │   └── ProfileTest.php
+│   │   ├── TestCase.php
+│   │   └── Unit
+│   │       └── ExampleTest.php
+│   └── vite.config.js
+├── tuts-core-tree.txt
+├── tuts-rag-service
+│   ├── .gitignore
+│   ├── __pycache__
+│   │   └── main.cpython-314.pyc
+│   ├── config.py
+│   ├── core
+│   │   ├── background.py
+│   │   ├── cache.py
+│   │   ├── ml_models.py
+│   │   ├── retrieval.py
+│   │   └── utils.py
+│   ├── dataset_tacs.json
+│   ├── eval_mis4tel.py
+│   ├── main.py
+│   ├── package-lock.json
+│   ├── package.json
+│   ├── prompts
+│   │   ├── query.py
+│   │   └── rag.py
+│   ├── requirements.txt
+│   ├── resultados_mis4tel_v2.json
+│   ├── resultados_mis4tel_v2.jsonl
+│   ├── routers
+│   │   ├── alunos.py
+│   │   ├── professores.py
+│   │   └── sistema.py
+│   └── services
+│       ├── analise.py
+│       ├── calendar.py
+│       ├── iaedu.py
+│       ├── ingestao.py
+│       ├── ocr.py
+│       ├── preferencia_auto.py
+│       └── query_expansion.py
+├── tuts-scrapers
+│   ├── dados_extraidos
+│   │   ├── cadeiras_mtc.json
+│   │   ├── cursos_ua.json
+│   │   └── html_mtc.html
+│   ├── scraper_ua.py
+│   └── scraper_ucs.py
+└── vite.config.js
+
+128 directories, 643 files

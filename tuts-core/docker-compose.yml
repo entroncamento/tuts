@@ -1,0 +1,98 @@
+version: "3.8"
+
+services:
+  # ── LARAVEL BACKEND ────────────────────────────────────────────────────────
+  laravel:
+    build:
+      context: ./tuts-core
+      dockerfile: Dockerfile.prod # <-- CORRIGIDO AQUI
+    container_name: tuts-laravel
+    restart: unless-stopped
+    stop_grace_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+    depends_on:
+      redis: { condition: service_started }
+    env_file:
+      - ./tuts-core/.env
+    environment:
+      APP_ENV: local
+      OCTANE_SERVER: frankenphp
+    volumes:
+      - tuts-storage:/app/storage
+      - ./tuts-rag-service/pdfs:/app/storage/app/public/pdfs
+    ports:
+      - "8000:80"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/up"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    networks: [tuts-network]
+
+  # ── LARAVEL WORKER ─────────────────────────────────────────────────────────
+  worker:
+    build:
+      context: ./tuts-core
+      dockerfile: Dockerfile.prod # <-- CORRIGIDO AQUI
+    container_name: tuts-worker
+    restart: unless-stopped
+    stop_grace_period: 60s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    depends_on:
+      redis: { condition: service_started }
+    env_file:
+      - ./tuts-core/.env
+    command: ["/usr/bin/supervisord", "-c", "/app/supervisord.conf"]
+    volumes:
+      - tuts-storage:/app/storage
+    networks: [tuts-network]
+
+  # ── RAG SERVICE ────────────────────────────────────────────────────────────
+  rag:
+    build:
+      context: ./tuts-rag-service
+      dockerfile: Dockerfile # <-- ESTE MANTÉM-SE IGUAL
+    container_name: tuts-rag
+    restart: unless-stopped
+    stop_grace_period: 15s
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+    env_file:
+      - ./tuts-rag-service/.env
+    volumes:
+      - ./tuts-rag-service/faiss_db:/app/faiss_db
+      - ./tuts-rag-service/pdfs:/app/pdfs
+    ports:
+      - "7860:7860"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:7860/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    networks: [tuts-network]
+
+  # ── CACHE ────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: tuts-redis
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+    networks: [tuts-network]
+
+networks:
+  tuts-network:
+    driver: bridge
+
+volumes:
+  tuts-redis-data:
+  tuts-storage:

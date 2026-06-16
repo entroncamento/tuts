@@ -1,32 +1,59 @@
-*.log
-.DS_Store
+# Environment
 .env
-.env.backup
-.env.production
-.phpactor.json
-.phpunit.result.cache
-/.fleet
-/.idea
-/.nova
-/.phpunit.cache
-/.vscode
-/.zed
-/auth.json
-/node_modules
-/public/build
-/public/hot
-/public/storage
-/storage/*.key
-/storage/pail
-/vendor
-Homestead.json
-Homestead.yaml
+.env.*
+!.env.example
+
+# OS / Windows metadata
+.DS_Store
 Thumbs.db
+*:Zone.Identifier
 
-**/caddy
-frankenphp
-frankenphp-worker.php
+# Node
+node_modules/
+.npm/
+.vite/
+dist/
+build/
 
-**/caddy
-frankenphp
-frankenphp-worker.php
+# PHP / Laravel
+vendor/
+tuts-core/storage/framework/cache/*
+tuts-core/storage/framework/sessions/*
+tuts-core/storage/framework/views/*
+tuts-core/storage/logs/*
+tuts-core/storage/app/public/pdfs/
+!tuts-core/storage/framework/cache/.gitignore
+!tuts-core/storage/framework/sessions/.gitignore
+!tuts-core/storage/framework/views/.gitignore
+!tuts-core/storage/logs/.gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Local RAG indexes; preserve locally, do not publish without explicit review.
+tuts-rag-service/faiss_db/
+
+# Local tools / secrets
+credentials.json
+token.json
+service_account.json
+
+# Temporary
+*.tmp
+*.log
+
+# Local handoff/support artifacts kept outside the repository.
+/Arquitetura Técnica do Projeto TUTS.pdf
+/tuts-rag-faiss-fix-handoff.tar.gz
+
+# Nested workspace copies/artifacts; keep local unless reviewed explicitly.
+tuts-core/tuts-core/
+tuts-core/tuts-rag-service/
+tuts-core/tuts-scrapers/
+tuts-core/tree_tuts_core.txt

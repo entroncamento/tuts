@@ -1,0 +1,134 @@
+{
+  "version": "2.0.0",
+  "presentation": {
+    "panel": "shared",
+    "showReuseMessage": false,
+    "clear": true,
+    "echo": false,
+    "focus": false
+  },
+  "tasks": [
+    {
+      "label": "TUTS: Arrancar Tudo",
+      "dependsOn": [
+        "0. REDIS (Redis Stack)",
+        "1. BACKEND (Laravel/Sail)",
+        "2. FRONTEND (Vue/Vite)",
+        "3. RAG (Python/FastAPI)",
+        "4. GIT"
+      ],
+      "dependsOrder": "parallel",
+      "problemMatcher": [],
+      "icon": {
+        "id": "play-circle",
+        "color": "terminal.ansiGreen"
+      }
+    },
+    {
+      "label": "0. REDIS (Redis Stack)",
+      "type": "process",
+      "command": "wsl.exe",
+      "args": [
+        "-d",
+        "Ubuntu",
+        "--cd",
+        "/home/gilal/tuts-workspace",
+        "bash",
+        "-lc",
+        "docker inspect redis-stack >/dev/null 2>&1 && docker start redis-stack || echo \"Container redis-stack nao existe. Cria-o com: docker run -d --name redis-stack -p 6379:6379 redis/redis-stack-server:latest\""
+      ],
+      "presentation": {
+        "reveal": "always",
+        "close": false,
+        "panel": "dedicated"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "1. BACKEND (Laravel/Sail)",
+      "type": "process",
+      "command": "wsl.exe",
+      "args": [
+        "-d",
+        "Ubuntu",
+        "--cd",
+        "/home/gilal/tuts-workspace/tuts-core",
+        "bash",
+        "-lc",
+        "./vendor/bin/sail up -d"
+      ],
+      "presentation": {
+        "group": "tuts-services",
+        "panel": "new"
+      },
+      "icon": {
+        "id": "server-environment",
+        "color": "terminal.ansiRed"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "2. FRONTEND (Vue/Vite)",
+      "type": "process",
+      "command": "wsl.exe",
+      "args": [
+        "-d",
+        "Ubuntu",
+        "--cd",
+        "/home/gilal/tuts-workspace/tuts-core",
+        "bash",
+        "-lc",
+        "set -e\ncd /home/gilal/tuts-workspace/tuts-core\necho \"A aguardar pelo Laravel/Sail...\"\nuntil container=$(./vendor/bin/sail ps -q laravel.test 2>/dev/null) && [ -n \"$container\" ] && docker inspect -f '{{.State.Running}}' \"$container\" 2>/dev/null | grep -q true; do\n  sleep 2\ndone\n\necho \"A limpar Vite/npm/node antigo dentro do container...\"\ndocker exec \"$container\" sh -lc 'pkill -9 -f [v]ite 2>/dev/null || true; pkill -9 -f [n]pm 2>/dev/null || true; pkill -9 -f [n]ode 2>/dev/null || true'\n\nrm -f public/hot\n\necho \"A iniciar Vue/Vite...\"\n./vendor/bin/sail npm run dev -- --host 0.0.0.0"
+      ],
+      "isBackground": true,
+      "presentation": {
+        "group": "tuts-services",
+        "panel": "new"
+      },
+      "icon": {
+        "id": "browser",
+        "color": "terminal.ansiCyan"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "3. RAG (Python/FastAPI)",
+      "type": "process",
+      "command": "wsl.exe",
+      "args": [
+        "-d",
+        "Ubuntu",
+        "--cd",
+        "/home/gilal/tuts-workspace/tuts-rag-service",
+        "bash",
+        "-lc",
+        "set -e\ncd /home/gilal/tuts-workspace/tuts-rag-service\nif [ ! -x ./venv/bin/python3 ]; then\n  echo \"RAG venv Linux nao encontrado em ./venv/bin/python3\"\n  exit 1\nfi\n./venv/bin/python3 -m uvicorn main:app --host 0.0.0.0 --port 8001 --env-file .env --reload --reload-dir . --reload-exclude .venv --reload-exclude venv --reload-exclude faiss_db --reload-exclude __pycache__ --reload-exclude pdfs"
+      ],
+      "isBackground": true,
+      "presentation": {
+        "group": "tuts-services",
+        "panel": "new"
+      },
+      "icon": {
+        "id": "hubot",
+        "color": "terminal.ansiYellow"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "4. GIT",
+      "type": "process",
+      "command": "wsl.exe",
+      "args": ["-d", "Ubuntu", "--cd", "/home/gilal/tuts-workspace", "bash"],
+      "presentation": {
+        "group": "tuts-workspace",
+        "panel": "new"
+      },
+      "icon": {
+        "id": "terminal-bash",
+        "color": "terminal.ansiMagenta"
+      },
+      "problemMatcher": []
+    }
+  ]
+}
