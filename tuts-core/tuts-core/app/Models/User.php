@@ -49,4 +49,14 @@ class User extends Authenticatable implements MustVerifyEmail
     {
         return $this->hasMany(TutsNotification::class);
     }
+
+    public function personalMaterials(): HasMany
+    {
+        return $this->hasMany(PersonalMaterial::class, 'owner_id');
+    }
+
+    public function uploadedPersonalMaterials(): HasMany
+    {
+        return $this->hasMany(PersonalMaterial::class, 'uploaded_by');
+    }
 }

@@ -1,0 +1,334 @@
+<?php
+
+namespace App\Http\Controllers\Api;
+
+use App\Http\Controllers\Controller;
+use App\Models\PersonalMaterial;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
+use Symfony\Component\HttpFoundation\StreamedResponse;
+
+class PersonalMaterialController extends Controller
+{
+    private const QUOTA_BYTES = 20 * 1024 * 1024;
+
+    private const MAX_UPLOAD_KB = 5120;
+
+    private const ALLOWED_EXTENSIONS = [
+        'pdf',
+        'docx',
+        'pptx',
+        'png',
+        'jpg',
+        'jpeg',
+        'txt',
+    ];
+
+    private const ALLOWED_MIME_TYPES = [
+        'application/pdf',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        'image/png',
+        'image/jpeg',
+        'text/plain',
+    ];
+
+    private const INLINE_EXTENSIONS = [
+        'pdf',
+        'png',
+        'jpg',
+        'jpeg',
+        'txt',
+    ];
+
+    public function index(): JsonResponse
+    {
+        $userId = $this->userId();
+
+        Log::info('[TUTS][PersonalMaterials] listing materials', [
+            'user_id' => $userId,
+        ]);
+
+        $materials = PersonalMaterial::query()
+            ->where('owner_id', $userId)
+            ->latest()
+            ->get();
+
+        return response()->json([
+            'data' => $materials->map(fn (PersonalMaterial $material) => $this->formatMaterial($material))->values(),
+            'quota' => $this->quotaPayload($userId),
+        ]);
+    }
+
+    public function store(Request $request): JsonResponse
+    {
+        $userId = $this->userId();
+
+        Log::info('[TUTS][PersonalMaterials] upload requested', [
+            'user_id' => $userId,
+        ]);
+
+        $validated = $request->validate([
+            'file' => [
+                'required',
+                'file',
+                'max:' . self::MAX_UPLOAD_KB,
+                'mimes:' . implode(',', self::ALLOWED_EXTENSIONS),
+                'mimetypes:' . implode(',', self::ALLOWED_MIME_TYPES),
+            ],
+        ]);
+
+        /** @var UploadedFile $file */
+        $file = $validated['file'];
+        $sizeBytes = (int) ($file->getSize() ?: 0);
+        $extension = strtolower((string) $file->getClientOriginalExtension());
+        $mimeType = $file->getMimeType() ?: $file->getClientMimeType();
+
+        if ($sizeBytes <= 0 || !in_array($extension, self::ALLOWED_EXTENSIONS, true) || !in_array($mimeType, self::ALLOWED_MIME_TYPES, true)) {
+            return response()->json([
+                'message' => 'Invalid file. Allowed types: PDF, DOCX, PPTX, PNG, JPEG and TXT.',
+            ], 422);
+        }
+
+        $usedBytes = $this->usedBytes($userId);
+
+        if ($usedBytes + $sizeBytes > self::QUOTA_BYTES) {
+            return response()->json([
+                'message' => 'Personal materials quota exceeded.',
+                'quota' => $this->quotaPayload($userId),
+            ], 422);
+        }
+
+        $originalName = basename((string) $file->getClientOriginalName());
+        $safeFilename = $this->safeFilename($originalName, $extension);
+        $storageKey = 'personal/users/' . $userId . '/' . Str::uuid() . '-' . $safeFilename;
+        $disk = Storage::disk('r2');
+        $fileStream = null;
+
+        try {
+            $fileStream = fopen($file->getRealPath(), 'rb');
+
+            if ($fileStream === false) {
+                throw new \RuntimeException('Unable to open uploaded file stream.');
+            }
+
+            $stored = $disk->put($storageKey, $fileStream);
+
+            if (!$stored) {
+                throw new \RuntimeException('R2 write returned false.');
+            }
+
+            $material = DB::transaction(function () use ($userId, $originalName, $mimeType, $extension, $sizeBytes, $storageKey) {
+                return PersonalMaterial::create([
+                    'owner_id' => $userId,
+                    'uploaded_by' => $userId,
+                    'original_name' => $originalName,
+                    'mime_type' => $mimeType,
+                    'extension' => $extension,
+                    'size_bytes' => $sizeBytes,
+                    'storage_disk' => 'r2',
+                    'storage_key' => $storageKey,
+                ]);
+            });
+        } catch (\Throwable $exception) {
+            Log::warning('[TUTS][PersonalMaterials] upload failed', [
+                'user_id' => $userId,
+                'size_bytes' => $sizeBytes,
+                'mime_type' => $mimeType,
+                'exception' => $exception::class,
+            ]);
+
+            try {
+                if ($storageKey !== '' && $disk->exists($storageKey)) {
+                    $disk->delete($storageKey);
+                }
+            } catch (\Throwable $cleanupException) {
+                Log::warning('[TUTS][PersonalMaterials] upload cleanup failed', [
+                    'user_id' => $userId,
+                    'exception' => $cleanupException::class,
+                ]);
+            }
+
+            return response()->json([
+                'message' => 'Failed to upload material.',
+            ], 500);
+        } finally {
+            if (is_resource($fileStream)) {
+                fclose($fileStream);
+            }
+        }
+
+        Log::info('[TUTS][PersonalMaterials] upload stored', [
+            'user_id' => $userId,
+            'material_id' => $material->id,
+            'size_bytes' => $material->size_bytes,
+            'mime_type' => $material->mime_type,
+        ]);
+
+        return response()->json([
+            'data' => $this->formatMaterial($material),
+            'quota' => $this->quotaPayload($userId),
+        ], 201);
+    }
+
+    public function view(PersonalMaterial $material): StreamedResponse|JsonResponse
+    {
+        $this->authorizeMaterial($material);
+
+        Log::info('[TUTS][PersonalMaterials] view requested', [
+            'user_id' => $this->userId(),
+            'material_id' => $material->id,
+            'size_bytes' => $material->size_bytes,
+            'mime_type' => $material->mime_type,
+        ]);
+
+        $disk = Storage::disk($material->storage_disk);
+
+        try {
+            $stream = $disk->readStream($material->storage_key);
+        } catch (\Throwable) {
+            $stream = false;
+        }
+
+        if ($stream === false) {
+            return response()->json([
+                'message' => 'Material file not found.',
+            ], 404);
+        }
+
+        $disposition = in_array(strtolower((string) $material->extension), self::INLINE_EXTENSIONS, true)
+            ? 'inline'
+            : 'attachment';
+
+        return response()->stream(function () use ($stream) {
+            fpassthru($stream);
+
+            if (is_resource($stream)) {
+                fclose($stream);
+            }
+        }, 200, [
+            'Content-Type' => $material->mime_type ?: 'application/octet-stream',
+            'Content-Disposition' => $disposition . '; filename="' . addslashes($material->original_name) . '"',
+            'Content-Length' => (string) $material->size_bytes,
+            'X-Content-Type-Options' => 'nosniff',
+        ]);
+    }
+
+    public function destroy(PersonalMaterial $material): JsonResponse
+    {
+        $this->authorizeMaterial($material);
+
+        Log::info('[TUTS][PersonalMaterials] delete requested', [
+            'user_id' => $this->userId(),
+            'material_id' => $material->id,
+            'size_bytes' => $material->size_bytes,
+            'mime_type' => $material->mime_type,
+        ]);
+
+        $disk = Storage::disk($material->storage_disk);
+
+        try {
+            if ($disk->exists($material->storage_key)) {
+                $disk->delete($material->storage_key);
+            }
+        } catch (\Throwable $exception) {
+            Log::warning('[TUTS][PersonalMaterials] delete failed', [
+                'user_id' => $this->userId(),
+                'material_id' => $material->id,
+                'exception' => $exception::class,
+            ]);
+
+            return response()->json([
+                'message' => 'Failed to delete material.',
+            ], 500);
+        }
+
+        $material->delete();
+
+        return response()->json([
+            'message' => 'Material deleted successfully.',
+        ]);
+    }
+
+    private function authorizeMaterial(PersonalMaterial $material): void
+    {
+        abort_unless((int) $material->owner_id === $this->userId(), 404);
+    }
+
+    private function userId(): int
+    {
+        $userId = Auth::id();
+
+        if (!$userId) {
+            abort(401, 'Utilizador não autenticado.');
+        }
+
+        return (int) $userId;
+    }
+
+    private function formatMaterial(PersonalMaterial $material): array
+    {
+        return [
+            'id' => (string) $material->id,
+            'name' => $material->original_name,
+            'original_name' => $material->original_name,
+            'mime_type' => $material->mime_type,
+            'extension' => $material->extension,
+            'size' => $this->humanSize((int) $material->size_bytes),
+            'size_bytes' => $material->size_bytes,
+            'source' => 'personal',
+            'visibility' => 'private',
+            'created_at' => $material->created_at?->toISOString(),
+            'view_url' => '/api/me/materials/' . $material->id . '/view',
+        ];
+    }
+
+    private function quotaPayload(int $userId): array
+    {
+        $usedBytes = $this->usedBytes($userId);
+
+        return [
+            'used_bytes' => $usedBytes,
+            'limit_bytes' => self::QUOTA_BYTES,
+            'remaining_bytes' => max(0, self::QUOTA_BYTES - $usedBytes),
+        ];
+    }
+
+    private function usedBytes(int $userId): int
+    {
+        return (int) PersonalMaterial::query()
+            ->where('owner_id', $userId)
+            ->sum('size_bytes');
+    }
+
+    private function safeFilename(string $filename, string $extension): string
+    {
+        $name = pathinfo($filename, PATHINFO_FILENAME);
+        $slug = Str::slug($name);
+
+        if ($slug === '') {
+            $slug = 'material';
+        }
+
+        return $slug . '.' . $extension;
+    }
+
+    private function humanSize(int $bytes): string
+    {
+        if ($bytes < 1024) {
+            return $bytes . ' B';
+        }
+
+        if ($bytes < 1048576) {
+            return round($bytes / 1024, 1) . ' KB';
+        }
+
+        return round($bytes / 1048576, 1) . ' MB';
+    }
+}

@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\ChatController;
 use App\Http\Controllers\Api\CourseController;
 use App\Http\Controllers\Api\NotificationController;
+use App\Http\Controllers\Api\PersonalMaterialController;
 use App\Http\Controllers\Api\SpaceFolderController;
 use App\Http\Controllers\Api\SpaceMaterialController;
 use App\Http\Controllers\Api\StudySpaceController;
@@ -19,6 +20,13 @@ Route::post('/api/login', [AuthController::class, 'login'])
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/api/logout', [AuthController::class, 'logout']);
     Route::get('/api/me', [AuthController::class, 'me']);
+
+    Route::prefix('api/me/materials')->group(function () {
+        Route::get('/', [PersonalMaterialController::class, 'index']);
+        Route::post('/', [PersonalMaterialController::class, 'store'])->middleware('throttle:20,1');
+        Route::get('/{material}/view', [PersonalMaterialController::class, 'view']);
+        Route::delete('/{material}', [PersonalMaterialController::class, 'destroy']);
+    });
 
     Route::get('/api/subjects', [CourseController::class, 'mySubjects']);
     Route::get('/api/subjects/{subject}/sections', [SubjectOfficialContentController::class, 'sections']);
