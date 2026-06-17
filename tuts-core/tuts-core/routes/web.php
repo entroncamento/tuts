@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\SpaceFolderController;
 use App\Http\Controllers\Api\SpaceMaterialController;
 use App\Http\Controllers\Api\StudySpaceController;
+use App\Http\Controllers\Api\SubjectOfficialContentController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -20,6 +21,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/api/me', [AuthController::class, 'me']);
 
     Route::get('/api/subjects', [CourseController::class, 'mySubjects']);
+    Route::get('/api/subjects/{subject}/sections', [SubjectOfficialContentController::class, 'sections']);
+    Route::get('/api/subjects/{subject}/materials', [SubjectOfficialContentController::class, 'materials']);
 
     Route::prefix('api/notifications')->group(function () {
         Route::get('/', [NotificationController::class, 'index']);
