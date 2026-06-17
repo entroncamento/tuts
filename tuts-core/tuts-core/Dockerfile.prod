@@ -63,4 +63,4 @@ ENV OCTANE_SERVER=frankenphp
 
 EXPOSE 10000
 
-CMD ["sh", "-lc", "echo Starting TUTS Core with artisan serve on PORT=${PORT:-10000}; php -v; ls -ld storage storage/logs bootstrap/cache; exec php artisan serve --host=0.0.0.0 --port=${PORT:-10000}"]
+CMD ["sh", "-lc", "set -e; echo '[TUTS][Startup] Running production migrations'; php artisan migrate --force; echo '[TUTS][Startup] Clearing Laravel caches'; php artisan optimize:clear; echo '[TUTS][Startup] Starting Laravel server on PORT='${PORT:-10000}; php -v; ls -ld storage storage/logs bootstrap/cache; exec php artisan serve --host=0.0.0.0 --port=${PORT:-10000}"]
