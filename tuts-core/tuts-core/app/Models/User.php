@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -38,6 +39,27 @@ class User extends Authenticatable implements MustVerifyEmail
     public function course()
     {
         return $this->belongsTo(Course::class);
+    }
+
+    public function subjects(): BelongsToMany
+    {
+        return $this->belongsToMany(Subject::class, 'subject_user')
+            ->withPivot(['role', 'status', 'source'])
+            ->withTimestamps();
+    }
+
+    public function studentSubjects(): BelongsToMany
+    {
+        return $this->subjects()
+            ->wherePivot('role', 'student')
+            ->wherePivot('status', 'active');
+    }
+
+    public function teachingSubjects(): BelongsToMany
+    {
+        return $this->subjects()
+            ->wherePivot('role', 'teacher')
+            ->wherePivot('status', 'active');
     }
 
     public function chats()

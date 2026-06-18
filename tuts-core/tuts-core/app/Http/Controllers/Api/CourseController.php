@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Course;
 use App\Models\Subject;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 class CourseController extends Controller
@@ -46,29 +47,48 @@ class CourseController extends Controller
             abort(401, 'Utilizador não autenticado.');
         }
 
-        if ($user->role === 'professor') {
-            $subjects = Subject::query()
-                ->select('id', 'name', 'url')
-                ->orderBy('name')
+        if ($this->isTeacherRole((string) $user->role)) {
+            $subjects = $user->teachingSubjects()
+                ->with(['creator', 'teachers'])
+                ->withCount(['students', 'sections', 'materials'])
+                ->orderBy('subjects.name')
                 ->get();
-        } else {
-            if (!$user->course_id) {
-                return response()->json([
-                    'status' => 'sucesso',
-                    'subjects' => [],
-                    'message' => 'O utilizador ainda não tem curso associado.',
+
+            if ($subjects->isNotEmpty()) {
+                Log::info('[TUTS][Subjects] using subject_user memberships', [
+                    'role' => 'teacher',
+                    'count' => $subjects->count(),
                 ]);
+            } else {
+                Log::info('[TUTS][Subjects] using teacher fallback');
+
+                $subjects = $this->legacyAllSubjects();
             }
+        } else {
+            $subjects = $user->studentSubjects()
+                ->with(['creator', 'teachers'])
+                ->withCount(['students', 'sections', 'materials'])
+                ->orderBy('subjects.name')
+                ->get();
 
-            $course = Course::query()
-                ->with(['subjects' => function ($query) {
-                    $query
-                        ->select('subjects.id', 'subjects.name', 'subjects.url')
-                        ->orderBy('subjects.name');
-                }])
-                ->find($user->course_id);
+            if ($subjects->isNotEmpty()) {
+                Log::info('[TUTS][Subjects] using subject_user memberships', [
+                    'role' => 'student',
+                    'count' => $subjects->count(),
+                ]);
+            } else {
+                Log::info('[TUTS][Subjects] using course curriculum fallback');
 
-            $subjects = $course?->subjects ?? collect();
+                if (!$user->course_id) {
+                    return response()->json([
+                        'status' => 'sucesso',
+                        'subjects' => [],
+                        'message' => 'O utilizador ainda não tem curso associado.',
+                    ]);
+                }
+
+                $subjects = $this->legacyCourseSubjects((int) $user->course_id);
+            }
         }
 
         return response()->json([
@@ -79,26 +99,96 @@ class CourseController extends Controller
         ]);
     }
 
+    private function isTeacherRole(string $role): bool
+    {
+        return in_array($role, ['professor', 'teacher'], true);
+    }
+
     private function formatSubject(Subject $subject, int $index): array
     {
         $metadata = $this->metadataForSubject($subject);
+        $acronym = $subject->acronym ?: $this->shortCode($subject->name);
+        $code = $subject->enrollment_code ?: $this->fallbackEnrollmentCode($subject);
+        $membershipRole = $this->membershipRoleFor($subject);
 
         return [
             'id' => 'uc-' . $subject->id,
             'subject_id' => $subject->id,
             'name' => $subject->name,
             'url' => $metadata['url'] ?? $subject->url,
-            'teacher' => $this->formatTeacher($metadata['teacher'] ?? null),
+            'teacher' => $this->teacherLabelFor($subject, $metadata['teacher'] ?? null),
             'teacherNote' => $metadata['teacher_note'] ?? null,
-            'year' => $metadata['year'] ?? 'Ano não definido',
-            'semester' => $metadata['semester'] ?? 'Semestre não definido',
-            'academicYear' => '2025/2026',
+            'year' => $subject->year ?? $metadata['year'] ?? 'Ano não definido',
+            'semester' => $subject->semester ?? $metadata['semester'] ?? 'Semestre não definido',
+            'academicYear' => $subject->academic_year ?? '2025/2026',
             'type' => $metadata['type'] ?? 'mandatory',
             'electiveGroup' => $metadata['elective_group'] ?? null,
             'cover' => $this->covers[$index % count($this->covers)],
-            'shortCode' => $this->shortCode($subject->name),
+            'shortCode' => $acronym,
             'description' => 'Unidade curricular de ' . $subject->name . '.',
+            'acronym' => $acronym,
+            'code' => $code,
+            'enrollment_code' => $code,
+            'enrollmentCode' => $code,
+            'created_by' => $subject->created_by,
+            'membership_role' => $membershipRole,
+            'is_teacher' => $membershipRole === 'teacher',
+            'students_count' => $subject->students_count ?? 0,
+            'sections_count' => $subject->sections_count ?? 0,
+            'materials_count' => $subject->materials_count ?? 0,
+            'color' => $subject->color,
+            'status' => $subject->status ?? 'active',
         ];
+    }
+
+    private function membershipRoleFor(Subject $subject): ?string
+    {
+        $role = $subject->pivot?->role ?? null;
+
+        return is_string($role) && $role !== '' ? $role : null;
+    }
+
+    private function fallbackEnrollmentCode(Subject $subject): string
+    {
+        return 'UC' . str_pad((string) $subject->id, 5, '0', STR_PAD_LEFT);
+    }
+
+    private function teacherLabelFor(Subject $subject, ?string $metadataTeacher): string
+    {
+        if ($subject->relationLoaded('teachers') && $subject->teachers->isNotEmpty()) {
+            return $this->formatTeacher($subject->teachers->pluck('name')->implode(', '));
+        }
+
+        if ($subject->relationLoaded('creator') && $subject->creator) {
+            return $this->formatTeacher($subject->creator->name);
+        }
+
+        return $this->formatTeacher($metadataTeacher);
+    }
+
+    private function legacyAllSubjects()
+    {
+        return Subject::query()
+            ->with(['creator', 'teachers'])
+            ->withCount(['students', 'sections', 'materials'])
+            ->where('status', 'active')
+            ->orderBy('name')
+            ->get();
+    }
+
+    private function legacyCourseSubjects(int $courseId)
+    {
+        $course = Course::query()
+            ->with(['subjects' => function ($query) {
+                $query
+                    ->with(['creator', 'teachers'])
+                    ->withCount(['students', 'sections', 'materials'])
+                    ->where('subjects.status', 'active')
+                    ->orderBy('subjects.name');
+            }])
+            ->find($courseId);
+
+        return $course?->subjects ?? collect();
     }
 
     private function metadataForSubject(Subject $subject): array
