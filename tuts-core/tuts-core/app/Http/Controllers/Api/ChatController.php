@@ -326,6 +326,57 @@ class ChatController extends Controller
         return $payload;
     }
 
+    private function extractRagErrorMessage(string $body): ?string
+    {
+        $decoded = json_decode(trim($body), true);
+
+        if (!is_array($decoded)) {
+            return null;
+        }
+
+        $message = $this->stringFromRagErrorValue($decoded['detail'] ?? null)
+            ?? $this->stringFromRagErrorValue($decoded['message'] ?? null);
+
+        if (!$message) {
+            return null;
+        }
+
+        $message = preg_replace('/\s+/u', ' ', trim($message));
+
+        if ($message === '') {
+            return null;
+        }
+
+        return mb_substr($message, 0, 500);
+    }
+
+    private function stringFromRagErrorValue(mixed $value): ?string
+    {
+        if (is_string($value)) {
+            return $value;
+        }
+
+        if (!is_array($value)) {
+            return null;
+        }
+
+        foreach ($value as $item) {
+            if (is_string($item) && trim($item) !== '') {
+                return $item;
+            }
+
+            if (is_array($item)) {
+                $nested = $this->stringFromRagErrorValue($item['msg'] ?? $item['message'] ?? $item['detail'] ?? null);
+
+                if ($nested) {
+                    return $nested;
+                }
+            }
+        }
+
+        return null;
+    }
+
     private function looksLikeTechnicalError(string $text): bool
     {
         $t = mb_strtolower(trim($text));
@@ -657,6 +708,7 @@ class ChatController extends Controller
 
             $buffer = '';
             $fullAiText = '';
+            $rawRagBody = '';
             $lastHeartbeat = microtime(true);
 
             $ch = curl_init($urlPython);
@@ -674,9 +726,13 @@ class ChatController extends Controller
                 CURLOPT_CONNECTTIMEOUT => 15,
                 CURLOPT_TIMEOUT => 120, // Aumentado para streams longos
 
-                CURLOPT_WRITEFUNCTION => function ($curl, $chunk) use (&$buffer, &$fullAiText, &$lastHeartbeat) {
+                CURLOPT_WRITEFUNCTION => function ($curl, $chunk) use (&$buffer, &$fullAiText, &$rawRagBody, &$lastHeartbeat) {
                     if (connection_aborted()) {
                         return 0; // Para o cURL se o cliente desconectar
+                    }
+
+                    if (strlen($rawRagBody) < 10000) {
+                        $rawRagBody .= substr($chunk, 0, 10000 - strlen($rawRagBody));
                     }
 
                     // Enviar heartbeat a cada 15 segundos se não houver chunks
@@ -726,17 +782,35 @@ class ChatController extends Controller
             $ok = curl_exec($ch);
             $responseCode = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
             $curlError = curl_error($ch);
+            $ragErrorMessage = $responseCode >= 400 ? $this->extractRagErrorMessage($rawRagBody) : null;
 
-            if ($ok === false || $responseCode >= 400) {
+            if ($ok === false || ($responseCode >= 400 && !$ragErrorMessage)) {
                 $this->ragService->reportFailure();
             } else {
                 $this->ragService->reportSuccess();
             }
 
             if ($curlError) {
-                \Illuminate\Support\Facades\Log::error("Erro cURL ao comunicar com RAG: " . $curlError, [
-                    'url' => $urlPython,
-                    'chat_id' => $chatId
+                Log::error('[TUTS][Chat][RAG] failed to communicate with RAG', [
+                    'chat_id' => $chatId,
+                    'message_id' => $userMessageId,
+                    'request_id' => $requestId,
+                    'context_type' => $contextType,
+                    'subject_id' => $subject?->id,
+                    'section_id' => $section?->id,
+                    'curl_error' => mb_substr($curlError, 0, 250),
+                    'http_status' => $responseCode ?: null,
+                ]);
+            } elseif ($responseCode >= 400) {
+                Log::warning('[TUTS][Chat][RAG] non-success response from RAG', [
+                    'chat_id' => $chatId,
+                    'message_id' => $userMessageId,
+                    'request_id' => $requestId,
+                    'context_type' => $contextType,
+                    'subject_id' => $subject?->id,
+                    'section_id' => $section?->id,
+                    'http_status' => $responseCode,
+                    'error_detail' => $ragErrorMessage,
                 ]);
             }
 
@@ -776,9 +850,11 @@ class ChatController extends Controller
 
             if (!connection_aborted()) {
                 if ($falhouServicoIa) {
-                    $msg = $responseCode === 401 || $responseCode === 403
+                    $msg = $ragErrorMessage
+                        ? "\n\n⚠️ " . $ragErrorMessage
+                        : ($responseCode === 401 || $responseCode === 403
                         ? "\n\n❌ Falha de autenticação interna com o serviço de IA."
-                        : "\n\n❌ Falha ao comunicar com o serviço de IA.";
+                        : "\n\n❌ Falha ao comunicar com o serviço de IA.");
 
                     if ($curlError) {
                         $msg = "\n\n❌ Falha ao comunicar com o serviço de IA.";
