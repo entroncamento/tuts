@@ -702,6 +702,19 @@ class ChatController extends Controller
                 'chat_id' => $chatId,
             ];
 
+            Log::info('[TUTS][Chat][RAG] sending structured context', [
+                'chat_id' => $chatId,
+                'message_id' => $userMessageId,
+                'request_id' => $requestId,
+                'context_type' => $contextType,
+                'subject_id' => $subject?->id,
+                'section_id' => $section?->id,
+                'attached_refs_count' => count($attachedMaterialRefs),
+                'personal_ids_count' => count($personalMaterialIds),
+                'subject_ids_count' => count($subjectMaterialIds),
+                'space_ids_count' => count($spaceMaterialIds),
+            ]);
+
             if ($imagemPath && file_exists($imagemPath)) {
                 $postFields['imagem'] = new \CURLFile($imagemPath, $imagemMime, $imagemNome);
             }
