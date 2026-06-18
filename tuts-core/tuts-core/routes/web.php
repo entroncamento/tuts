@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\PersonalMaterialController;
 use App\Http\Controllers\Api\SpaceFolderController;
 use App\Http\Controllers\Api\SpaceMaterialController;
 use App\Http\Controllers\Api\StudySpaceController;
+use App\Http\Controllers\Api\SubjectController;
 use App\Http\Controllers\Api\SubjectOfficialContentController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -28,9 +29,16 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::delete('/{material}', [PersonalMaterialController::class, 'destroy']);
     });
 
+    Route::get('/api/me/subjects', [SubjectController::class, 'studentSubjects']);
+    Route::get('/api/me/teaching-subjects', [SubjectController::class, 'teachingSubjects']);
     Route::get('/api/subjects', [CourseController::class, 'mySubjects']);
+    Route::post('/api/subjects', [SubjectController::class, 'store'])->middleware('throttle:30,1');
+    Route::post('/api/subjects/join', [SubjectController::class, 'join'])->middleware('throttle:30,1');
     Route::get('/api/subjects/{subject}/sections', [SubjectOfficialContentController::class, 'sections']);
     Route::get('/api/subjects/{subject}/materials', [SubjectOfficialContentController::class, 'materials']);
+    Route::get('/api/subjects/{subject}/students', [SubjectController::class, 'students']);
+    Route::get('/api/subjects/{subject}', [SubjectController::class, 'show']);
+    Route::patch('/api/subjects/{subject}', [SubjectController::class, 'update']);
 
     Route::prefix('api/notifications')->group(function () {
         Route::get('/', [NotificationController::class, 'index']);
