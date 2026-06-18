@@ -4,12 +4,12 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Message extends Model
 {
     use HasFactory;
 
-    // 🔥 ADICIONA O 'meta_data' AQUI À LISTA VIP!
     protected $fillable = ['chat_id', 'role', 'content', 'meta_data'];
 
     protected $casts = [
@@ -19,5 +19,10 @@ class Message extends Model
     public function chat()
     {
         return $this->belongsTo(Chat::class);
+    }
+
+    public function materialRefs(): HasMany
+    {
+        return $this->hasMany(MessageMaterialRef::class);
     }
 }

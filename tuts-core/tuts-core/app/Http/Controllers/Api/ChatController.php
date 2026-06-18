@@ -5,13 +5,20 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Chat;
 use App\Models\Message;
+use App\Models\PersonalMaterial;
 use App\Models\SpaceFolder;
+use App\Models\SpaceMaterial;
 use App\Models\StudySpace;
 use App\Models\Subject;
+use App\Models\SubjectMaterial;
+use App\Models\SubjectSection;
 use App\Services\RagService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Context;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\ValidationException;
 
 class ChatController extends Controller
 {
@@ -56,14 +63,267 @@ class ChatController extends Controller
             return false;
         }
 
-        if ($user->role === 'professor' || $user->role === 'teacher') {
+        Log::info('[TUTS][Chat] using subject_user UC authorization', [
+            'user_id' => $user->id,
+            'subject_id' => $subject->id,
+        ]);
+
+        $role = (string) $user->role;
+        $isTeacher = in_array($role, ['professor', 'teacher'], true);
+        $membershipRole = $isTeacher ? 'teacher' : 'student';
+
+        $hasMembership = DB::table('subject_user')
+            ->where('subject_id', $subject->id)
+            ->where('user_id', $user->id)
+            ->where('role', $membershipRole)
+            ->where('status', 'active')
+            ->exists();
+
+        if ($hasMembership) {
             return true;
         }
 
-        return $subject
+        if ($isTeacher && (int) $subject->created_by === (int) $user->id) {
+            return true;
+        }
+
+        $legacyAllowed = !$isTeacher && $user->course_id && $subject
             ->courses()
             ->where('courses.id', $user->course_id)
             ->exists();
+
+        if ($legacyAllowed) {
+            Log::warning('[TUTS][Chat] using legacy UC fallback', [
+                'user_id' => $user->id,
+                'subject_id' => $subject->id,
+            ]);
+
+            return true;
+        }
+
+        Log::warning('[TUTS][Chat] forbidden UC chat access', [
+            'user_id' => $user->id,
+            'subject_id' => $subject->id,
+            'role' => $role,
+        ]);
+
+        return false;
+    }
+
+    private function resolveSubjectForStream(Request $request): ?Subject
+    {
+        if ($request->filled('subject_id')) {
+            return Subject::findOrFail((int) $request->input('subject_id'));
+        }
+
+        if ($request->filled('uc')) {
+            Log::warning('[TUTS][Chat] using legacy UC fallback', [
+                'user_id' => Auth::id(),
+                'uc' => $request->input('uc'),
+            ]);
+
+            return Subject::where('name', $request->input('uc'))->firstOrFail();
+        }
+
+        return null;
+    }
+
+    private function resolveSection(?Subject $subject, ?int $sectionId): ?SubjectSection
+    {
+        if (!$sectionId) {
+            return null;
+        }
+
+        if (!$subject) {
+            throw ValidationException::withMessages([
+                'section_id' => 'A secção só pode ser usada com uma UC válida.',
+            ]);
+        }
+
+        return SubjectSection::query()
+            ->where('id', $sectionId)
+            ->where('subject_id', $subject->id)
+            ->firstOrFail();
+    }
+
+    private function parseAttachedMaterialRefs(Request $request): array
+    {
+        if (!$request->filled('attachedMaterialRefs')) {
+            return [];
+        }
+
+        $decoded = json_decode((string) $request->input('attachedMaterialRefs'), true);
+
+        if (!is_array($decoded) || array_is_list($decoded) === false) {
+            throw ValidationException::withMessages([
+                'attachedMaterialRefs' => 'As referências de materiais têm de ser um array JSON.',
+            ]);
+        }
+
+        if (count($decoded) > 20) {
+            throw ValidationException::withMessages([
+                'attachedMaterialRefs' => 'Não podes anexar mais de 20 materiais por mensagem.',
+            ]);
+        }
+
+        return $decoded;
+    }
+
+    private function resolveAttachedMaterialRefs(array $refs, ?Subject $subject, ?SubjectSection $section, ?StudySpace $space, int $userId): array
+    {
+        $resolved = [];
+
+        foreach ($refs as $index => $ref) {
+            if (!is_array($ref)) {
+                throw ValidationException::withMessages([
+                    "attachedMaterialRefs.{$index}" => 'Cada referência de material tem de ser um objeto.',
+                ]);
+            }
+
+            $source = (string) ($ref['source'] ?? '');
+            $materialId = (int) ($ref['material_id'] ?? $ref['id'] ?? 0);
+
+            if (!in_array($source, ['personal', 'subject', 'space'], true) || $materialId < 1) {
+                throw ValidationException::withMessages([
+                    "attachedMaterialRefs.{$index}" => 'Referência de material inválida.',
+                ]);
+            }
+
+            $refSubjectId = isset($ref['subject_id']) ? (int) $ref['subject_id'] : null;
+            $refSectionId = isset($ref['section_id']) ? (int) $ref['section_id'] : null;
+
+            if ($refSectionId) {
+                $refSection = SubjectSection::findOrFail($refSectionId);
+                if ($refSubjectId && (int) $refSection->subject_id !== $refSubjectId) {
+                    throw ValidationException::withMessages([
+                        "attachedMaterialRefs.{$index}.section_id" => 'A secção indicada não pertence à UC do material.',
+                    ]);
+                }
+            }
+
+            if ($source === 'personal') {
+                $material = PersonalMaterial::query()
+                    ->where('id', $materialId)
+                    ->where('owner_id', $userId)
+                    ->firstOrFail();
+
+                $resolved[] = [
+                    'source' => 'personal',
+                    'material_id' => $material->id,
+                    'subject_id' => null,
+                    'section_id' => null,
+                    'display_name' => $material->original_name,
+                    'mime_type' => $material->mime_type,
+                    'size_bytes' => $material->size_bytes,
+                    'meta_data' => [
+                        'extension' => $material->extension,
+                    ],
+                ];
+
+                continue;
+            }
+
+            if ($source === 'subject') {
+                $material = SubjectMaterial::findOrFail($materialId);
+                $materialSubject = Subject::findOrFail((int) $material->subject_id);
+
+                abort_unless($this->userCanAccessSubject($materialSubject), 403, 'Acesso negado ao material da UC.');
+
+                if ($subject && (int) $material->subject_id !== (int) $subject->id) {
+                    throw ValidationException::withMessages([
+                        "attachedMaterialRefs.{$index}.subject_id" => 'O material não pertence à UC do chat.',
+                    ]);
+                }
+
+                if ($refSubjectId && (int) $material->subject_id !== $refSubjectId) {
+                    throw ValidationException::withMessages([
+                        "attachedMaterialRefs.{$index}.subject_id" => 'O subject_id indicado não coincide com o material.',
+                    ]);
+                }
+
+                if ($refSectionId && (int) $material->section_id !== $refSectionId) {
+                    throw ValidationException::withMessages([
+                        "attachedMaterialRefs.{$index}.section_id" => 'O section_id indicado não coincide com o material.',
+                    ]);
+                }
+
+                if ($section && $material->section_id && (int) $material->section_id !== (int) $section->id) {
+                    throw ValidationException::withMessages([
+                        "attachedMaterialRefs.{$index}.section_id" => 'O material pertence a outra secção.',
+                    ]);
+                }
+
+                $resolved[] = [
+                    'source' => 'subject',
+                    'material_id' => $material->id,
+                    'subject_id' => $material->subject_id,
+                    'section_id' => $material->section_id,
+                    'display_name' => $material->name,
+                    'mime_type' => $material->mime_type,
+                    'size_bytes' => $material->size_bytes,
+                    'meta_data' => [
+                        'type' => $material->type,
+                        'source' => $material->source,
+                    ],
+                ];
+
+                continue;
+            }
+
+            $material = SpaceMaterial::query()
+                ->where('id', $materialId)
+                ->where('user_id', $userId)
+                ->firstOrFail();
+
+            if (!$space || (int) $material->study_space_id !== (int) $space->id) {
+                throw ValidationException::withMessages([
+                    "attachedMaterialRefs.{$index}.id" => 'O material de Espaço não pertence ao Espaço do chat.',
+                ]);
+            }
+
+            $resolved[] = [
+                'source' => 'space',
+                'material_id' => $material->id,
+                'subject_id' => null,
+                'section_id' => null,
+                'display_name' => $material->original_name,
+                'mime_type' => $material->mime_type,
+                'size_bytes' => $material->size_bytes,
+                'meta_data' => [
+                    'study_space_id' => $material->study_space_id,
+                    'folder_id' => $material->space_folder_id,
+                    'extension' => $material->extension,
+                ],
+            ];
+        }
+
+        return $resolved;
+    }
+
+    private function formatMaterialRef($ref): array
+    {
+        return [
+            'source' => $ref->source,
+            'id' => $ref->material_id,
+            'material_id' => $ref->material_id,
+            'name' => $ref->display_name,
+            'display_name' => $ref->display_name,
+            'mime_type' => $ref->mime_type,
+            'size_bytes' => $ref->size_bytes,
+            'subject_id' => $ref->subject_id,
+            'section_id' => $ref->section_id,
+            'meta_data' => $ref->meta_data,
+        ];
+    }
+
+    private function formatMessage(Message $message): array
+    {
+        $payload = $message->toArray();
+        $payload['materials'] = $message->relationLoaded('materialRefs')
+            ? $message->materialRefs->map(fn ($ref) => $this->formatMaterialRef($ref))->values()
+            : [];
+
+        return $payload;
     }
 
     private function looksLikeTechnicalError(string $text): bool
@@ -148,27 +408,33 @@ class ChatController extends Controller
         $request->validate([
             'chat_id' => 'nullable|integer|exists:chats,id',
             'texto' => 'required|string|max:4000',
+            'subject_id' => 'nullable|integer|exists:subjects,id',
             'uc' => 'nullable|string|max:255',
             'context_type' => 'nullable|string|in:uc,space,temporary',
+            'section_id' => 'nullable|integer|exists:subject_sections,id',
             'space_id' => 'nullable|integer|exists:study_spaces,id',
             'folder_id' => 'nullable|integer|exists:space_folders,id',
             'preferencia' => 'nullable|string|in:default,visual,plano,quiz,feynman',
             'imagem' => 'nullable|image|max:4096',
+            'attachedMaterialRefs' => 'nullable|string',
         ]);
 
         $userId = $this->requireAuthenticatedUserId();
         $contextType = $request->input('context_type', 'uc');
         $subject = null;
+        $section = null;
         $space = null;
         $folder = null;
 
         if ($contextType === 'uc') {
-            if (!$request->filled('uc')) {
+            $subject = $this->resolveSubjectForStream($request);
+
+            if (!$subject) {
                 abort(422, 'Tens de escolher uma UC antes de perguntar ao TUT\'S.');
             }
 
-            $subject = Subject::where('name', $request->uc)->firstOrFail();
             abort_unless($this->userCanAccessSubject($subject), 403, 'Acesso negado. Não está inscrito no curso desta Unidade Curricular.');
+            $section = $this->resolveSection($subject, $request->filled('section_id') ? (int) $request->input('section_id') : null);
         }
 
         if ($contextType === 'space') {
@@ -189,6 +455,20 @@ class ChatController extends Controller
                     ->firstOrFail();
             }
         }
+
+        if ($contextType !== 'uc' && $request->filled('section_id')) {
+            throw ValidationException::withMessages([
+                'section_id' => 'A secção só pode ser usada em conversas de UC.',
+            ]);
+        }
+
+        $attachedMaterialRefs = $this->resolveAttachedMaterialRefs(
+            $this->parseAttachedMaterialRefs($request),
+            $subject,
+            $section,
+            $space,
+            $userId
+        );
 
         if ($request->filled('chat_id')) {
             $chat = Chat::where('id', (int) $request->chat_id)
@@ -263,23 +543,54 @@ class ChatController extends Controller
 
         $texto = $request->texto;
         $preferencia = $request->input('preferencia', 'default');
+        $requestId = Context::get('request_id');
         $uc = match ($contextType) {
             'uc' => $subject?->name ?? (string) $request->uc,
             'space' => 'Espaço: ' . ($space?->name ?? 'Sem nome'),
             default => 'Conversa temporária',
         };
 
-        $userMessage = DB::transaction(function () use ($chat, $chatId, $texto) {
+        $messageMetadata = [
+            'context' => [
+                'context_type' => $contextType,
+                'subject_id' => $subject?->id,
+                'subject_name' => $subject?->name,
+                'section_id' => $section?->id,
+                'section_name' => $section?->name,
+                'space_id' => $space?->id,
+                'space_name' => $space?->name,
+                'folder_id' => $folder?->id,
+                'folder_name' => $folder?->name,
+            ],
+            'attached_material_refs' => $attachedMaterialRefs,
+            'rag' => [
+                'request_id' => $requestId,
+                'sources' => [],
+                'citations' => [],
+            ],
+        ];
+
+        $userMessage = DB::transaction(function () use ($chat, $chatId, $texto, $messageMetadata, $attachedMaterialRefs) {
             $chat->touch();
 
-            return Message::create([
+            $message = Message::create([
                 'chat_id' => $chatId,
                 'role' => 'user',
                 'content' => $texto,
+                'meta_data' => $messageMetadata,
             ]);
+
+            foreach ($attachedMaterialRefs as $ref) {
+                $message->materialRefs()->create($ref);
+            }
+
+            return $message;
         });
 
         $userMessageId = (int) $userMessage->id;
+        $personalMaterialIds = collect($attachedMaterialRefs)->where('source', 'personal')->pluck('material_id')->values()->all();
+        $subjectMaterialIds = collect($attachedMaterialRefs)->where('source', 'subject')->pluck('material_id')->values()->all();
+        $spaceMaterialIds = collect($attachedMaterialRefs)->where('source', 'space')->pluck('material_id')->values()->all();
 
         return response()->stream(function () use (
             $urlPython,
@@ -294,7 +605,15 @@ class ChatController extends Controller
             $imagemPath,
             $imagemNome,
             $imagemMime,
-            $userMessageId
+            $userMessageId,
+            $contextType,
+            $subject,
+            $section,
+            $attachedMaterialRefs,
+            $personalMaterialIds,
+            $subjectMaterialIds,
+            $spaceMaterialIds,
+            $requestId
         ) {
             // Prevenir interrupção prematura do script pelo PHP
             ignore_user_abort(true);
@@ -306,6 +625,7 @@ class ChatController extends Controller
             // Enviar ID do chat imediatamente
             echo 'data: ' . json_encode([
                 'chat_id' => $chatId,
+                'message_id' => $userMessageId,
             ], JSON_UNESCAPED_UNICODE) . "\n\n";
 
             // Heartbeat inicial
@@ -321,6 +641,14 @@ class ChatController extends Controller
                 'thread_id' => $threadId,
                 'historico' => $historico,
                 'message_id' => $userMessageId,
+                'subject_id' => $subject?->id,
+                'section_id' => $section?->id,
+                'attached_material_refs' => json_encode($attachedMaterialRefs, JSON_UNESCAPED_UNICODE),
+                'personal_material_ids' => json_encode($personalMaterialIds, JSON_UNESCAPED_UNICODE),
+                'subject_material_ids' => json_encode($subjectMaterialIds, JSON_UNESCAPED_UNICODE),
+                'space_material_ids' => json_encode($spaceMaterialIds, JSON_UNESCAPED_UNICODE),
+                'context_type' => $contextType,
+                'chat_id' => $chatId,
             ];
 
             if ($imagemPath && file_exists($imagemPath)) {
@@ -330,7 +658,6 @@ class ChatController extends Controller
             $buffer = '';
             $fullAiText = '';
             $lastHeartbeat = microtime(true);
-            $requestId = \Illuminate\Support\Facades\Context::get('request_id');
 
             $ch = curl_init($urlPython);
 
@@ -422,11 +749,25 @@ class ChatController extends Controller
                 !empty(trim($fullAiText)) &&
                 !$this->looksLikeTechnicalError($fullAiText)
             ) {
-                DB::transaction(function () use ($chat, $chatId, $fullAiText) {
+                DB::transaction(function () use ($chat, $chatId, $fullAiText, $contextType, $subject, $section, $requestId) {
                     Message::create([
                         'chat_id' => $chatId,
                         'role' => 'ai',
                         'content' => $fullAiText,
+                        'meta_data' => [
+                            'context' => [
+                                'context_type' => $contextType,
+                                'subject_id' => $subject?->id,
+                                'subject_name' => $subject?->name,
+                                'section_id' => $section?->id,
+                                'section_name' => $section?->name,
+                            ],
+                            'rag' => [
+                                'request_id' => $requestId,
+                                'sources' => [],
+                                'citations' => [],
+                            ],
+                        ],
                     ]);
 
                     $chat->touch();
@@ -468,9 +809,12 @@ class ChatController extends Controller
             ->where('user_id', $userId)
             ->firstOrFail();
 
-        $mensagens = Message::where('chat_id', $chat->id)
+        $mensagens = Message::with('materialRefs')
+            ->where('chat_id', $chat->id)
             ->orderBy('created_at', 'asc')
-            ->get();
+            ->get()
+            ->map(fn (Message $message) => $this->formatMessage($message))
+            ->values();
 
         return response()->json([
             'status' => 'sucesso',
@@ -480,37 +824,27 @@ class ChatController extends Controller
             'subject_id' => $chat->subject_id,
             'subject_name' => $chat->subject?->name,
             'space_id' => $chat->study_space_id,
+            'study_space_id' => $chat->study_space_id,
             'space_name' => $chat->studySpace?->name,
             'folder_id' => $chat->space_folder_id,
+            'space_folder_id' => $chat->space_folder_id,
             'folder_name' => $chat->spaceFolder?->name,
             'mensagens' => $mensagens,
         ]);
     }
 
-    public function listarChatsPorUC(Request $request)
+    public function listarChats(Request $request)
     {
         $userId = $this->requireAuthenticatedUserId();
         $userName = Auth::user()?->name ?? 'Utilizador';
 
-        $chats = Chat::query()
-            ->where('chats.user_id', $userId)
-            ->leftJoin('subjects', 'chats.subject_id', '=', 'subjects.id')
-            ->leftJoin('study_spaces', 'chats.study_space_id', '=', 'study_spaces.id')
-            ->leftJoin('space_folders', 'chats.space_folder_id', '=', 'space_folders.id')
-            ->select(
-                'chats.id as chat_id',
-                'chats.context_type',
-                'chats.study_space_id as space_id',
-                'chats.space_folder_id as folder_id',
-                'space_folders.name as nome_pasta',
-                'study_spaces.name as nome_espaco',
-                'subjects.id as subject_id',
-                'subjects.name as nome_uc',
-                'chats.title',
-                'chats.updated_at'
-            )
-            ->orderBy('chats.updated_at', 'desc')
-            ->get();
+        $chats = Chat::with(['subject', 'studySpace', 'spaceFolder'])
+            ->with(['messages' => fn ($query) => $query->latest()->limit(1)])
+            ->where('user_id', $userId)
+            ->orderBy('updated_at', 'desc')
+            ->get()
+            ->map(fn (Chat $chat) => $this->formatChatListItem($chat))
+            ->values();
 
         return response()->json([
             'status' => 'sucesso',
@@ -519,15 +853,52 @@ class ChatController extends Controller
         ]);
     }
 
-    private function formatChat(Chat $chat): array
+    public function listarChatsPorUC(Request $request)
     {
+        return $this->listarChats($request);
+    }
+
+    private function formatChatListItem(Chat $chat): array
+    {
+        $lastMessage = $chat->messages->first();
+        $preview = $lastMessage ? mb_substr(trim((string) $lastMessage->content), 0, 160) : null;
+
         return [
             'chat_id' => $chat->id,
             'title' => $chat->title,
             'context_type' => $chat->context_type ?? 'uc',
             'subject_id' => $chat->subject_id,
+            'subject_name' => $chat->subject?->name,
+            'study_space_id' => $chat->study_space_id,
             'space_id' => $chat->study_space_id,
+            'space_name' => $chat->studySpace?->name,
+            'space_folder_id' => $chat->space_folder_id,
             'folder_id' => $chat->space_folder_id,
+            'folder_name' => $chat->spaceFolder?->name,
+            'is_temporary' => (bool) $chat->is_temporary,
+            'last_message' => $preview,
+            'last_message_role' => $lastMessage?->role,
+            'created_at' => $chat->created_at?->toISOString(),
+            'updated_at' => $chat->updated_at?->toISOString(),
+        ];
+    }
+
+    private function formatChat(Chat $chat): array
+    {
+        $chat->loadMissing(['subject', 'studySpace', 'spaceFolder']);
+
+        return [
+            'chat_id' => $chat->id,
+            'title' => $chat->title,
+            'context_type' => $chat->context_type ?? 'uc',
+            'subject_id' => $chat->subject_id,
+            'subject_name' => $chat->subject?->name,
+            'study_space_id' => $chat->study_space_id,
+            'space_id' => $chat->study_space_id,
+            'space_name' => $chat->studySpace?->name,
+            'space_folder_id' => $chat->space_folder_id,
+            'folder_id' => $chat->space_folder_id,
+            'folder_name' => $chat->spaceFolder?->name,
             'is_temporary' => (bool) $chat->is_temporary,
             'created_at' => $chat->created_at?->toISOString(),
             'updated_at' => $chat->updated_at?->toISOString(),

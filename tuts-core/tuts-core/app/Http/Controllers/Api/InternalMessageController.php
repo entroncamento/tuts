@@ -47,15 +47,11 @@ class InternalMessageController extends Controller
             ->where('role', 'user')
             ->firstOrFail();
 
-        // (Opcional) Prevenir sobrescritas se o Python tentar enviar duas vezes por erro de retry
-        if (!empty($message->meta_data)) {
-            return response()->json([
-                'status' => 'ignorado',
-                'motivo' => 'Metadata já existe nesta mensagem.'
-            ], 200);
-        }
+        $existing = is_array($message->meta_data) ? $message->meta_data : [];
 
-        $message->meta_data = $data;
+        $message->meta_data = array_replace_recursive($existing, [
+            'analysis' => $data,
+        ]);
         $message->save();
 
         return response()->json([
