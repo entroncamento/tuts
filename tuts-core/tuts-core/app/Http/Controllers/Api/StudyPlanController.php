@@ -3,8 +3,13 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Subject;
+use App\Models\SubjectMaterial;
 use App\Services\StudyPlanService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpFoundation\Response;
 
 class StudyPlanController extends Controller
@@ -16,26 +21,142 @@ class StudyPlanController extends Controller
         $this->studyPlanService = $studyPlanService;
     }
 
-    public function store(Request $request)
+    public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'subject_id' => 'required|exists:subjects,id',
-            'subject_name' => 'required|string',
-            'context' => 'required|string',
-            'material_ids' => 'required|array',
-            'material_ids.*' => 'string',
-            'duration_weeks' => 'required|integer',
-            'sessions_per_week' => 'required|integer',
+            'subject_id' => 'required|integer|exists:subjects,id',
+            'subject_name' => 'nullable|string|max:255',
+            'context' => 'required|string|max:3000',
+            'material_ids' => 'nullable|array|max:20',
+            'material_ids.*' => 'integer|distinct',
+            'duration_weeks' => 'required|integer|min:1|max:16',
+            'sessions_per_week' => 'required|integer|min:1|max:14',
         ]);
 
-        try {
-            $plan = $this->studyPlanService->generate($validated);
-            return response()->json($plan, Response::HTTP_CREATED);
-        } catch (\Exception $e) {
+        $user = $request->user();
+        $subject = Subject::findOrFail((int) $validated['subject_id']);
+
+        if (!$this->userCanAccessSubject($subject, $user)) {
+            Log::warning('[TUTS][StudyPlan] subject access denied', [
+                'user_id' => $user?->id,
+                'subject_id' => $subject->id,
+                'role' => $user?->role,
+            ]);
+
             return response()->json([
-                'message' => 'Erro ao comunicar com o serviço RAG.',
-                'details' => $e->getMessage()
-            ], Response::HTTP_BAD_GATEWAY); // 502 Bad Gateway
+                'status' => 'erro',
+                'message' => 'Não tens acesso a esta UC.',
+            ], Response::HTTP_FORBIDDEN);
         }
+
+        Log::info('[TUTS][StudyPlan] subject access allowed', [
+            'user_id' => $user->id,
+            'subject_id' => $subject->id,
+            'role' => $user->role,
+        ]);
+
+        $materials = $this->resolveSubjectMaterials($validated['material_ids'] ?? [], $subject);
+
+        try {
+            $plan = $this->studyPlanService->generate([
+                'user_id' => $user->id,
+                'subject' => [
+                    'id' => $subject->id,
+                    'name' => $subject->name,
+                ],
+                'context' => $validated['context'],
+                'materials' => $materials,
+                'duration_weeks' => (int) $validated['duration_weeks'],
+                'sessions_per_week' => (int) $validated['sessions_per_week'],
+            ]);
+
+            return response()->json([
+                'status' => 'sucesso',
+                'plan' => $plan,
+                'meta' => [
+                    'subject_id' => $subject->id,
+                    'subject_name' => $subject->name,
+                    'duration_weeks' => (int) $validated['duration_weeks'],
+                    'sessions_per_week' => (int) $validated['sessions_per_week'],
+                    'material_count' => count($materials),
+                ],
+            ], Response::HTTP_CREATED);
+        } catch (\Exception $e) {
+            $status = in_array($e->getCode(), [502, 503], true)
+                ? $e->getCode()
+                : Response::HTTP_BAD_GATEWAY;
+
+            return response()->json([
+                'status' => 'erro',
+                'message' => $e->getMessage() ?: 'Serviço de planos de estudo indisponível.',
+            ], $status);
+        }
+    }
+
+    private function userCanAccessSubject(Subject $subject, $user): bool
+    {
+        if (!$user) {
+            return false;
+        }
+
+        if ($user->role === 'aluno') {
+            return DB::table('subject_user')
+                ->where('subject_id', $subject->id)
+                ->where('user_id', $user->id)
+                ->where('role', 'student')
+                ->where('status', 'active')
+                ->exists();
+        }
+
+        if ($user->role === 'professor') {
+            $hasTeacherMembership = DB::table('subject_user')
+                ->where('subject_id', $subject->id)
+                ->where('user_id', $user->id)
+                ->where('role', 'teacher')
+                ->where('status', 'active')
+                ->exists();
+
+            return $hasTeacherMembership || (int) $subject->created_by === (int) $user->id;
+        }
+
+        return false;
+    }
+
+    private function resolveSubjectMaterials(array $materialIds, Subject $subject): array
+    {
+        if ($materialIds === []) {
+            return [];
+        }
+
+        $materials = SubjectMaterial::query()
+            ->whereIn('id', $materialIds)
+            ->where('subject_id', $subject->id)
+            ->get()
+            ->keyBy('id');
+
+        if ($materials->count() !== count(array_unique($materialIds))) {
+            abort(response()->json([
+                'status' => 'erro',
+                'message' => 'Um ou mais materiais não pertencem a esta UC.',
+            ], Response::HTTP_UNPROCESSABLE_ENTITY));
+        }
+
+        return collect($materialIds)
+            ->map(function (int $materialId) use ($materials) {
+                $material = $materials->get($materialId);
+
+                return [
+                    'id' => $material->id,
+                    'name' => $material->name,
+                    'title' => $material->name,
+                    'type' => $material->type,
+                    'mime_type' => $material->mime_type,
+                    'size_bytes' => $material->size_bytes,
+                    'subject_id' => $material->subject_id,
+                    'section_id' => $material->section_id,
+                ];
+            })
+            ->values()
+            ->all();
     }
 }

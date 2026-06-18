@@ -45,4 +45,5 @@ Route::middleware(['throttle:internal', 'internal.api'])->group(function () {
     Route::post('/messages/{id}/metadata', [InternalMessageController::class, 'guardarMetadata']);
 });
 
-Route::post('/study-plans', [StudyPlanController::class, 'store'])->middleware('auth:sanctum');
+Route::post('/study-plans', [StudyPlanController::class, 'store'])
+    ->middleware(['auth:sanctum', 'verified', 'throttle:10,1']);

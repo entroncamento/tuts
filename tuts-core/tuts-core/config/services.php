@@ -47,7 +47,8 @@ return [
     ],
 
     'rag' => [
-        'base_url' => env('RAG_SERVICE_BASE_URL', 'http://127.0.0.1:8001'),
-        'internal_token' => env('RAG_SERVICE_INTERNAL_TOKEN'),
+        'base_url' => env('RAG_SERVICE_BASE_URL')
+            ?: rtrim((string) preg_replace('#/perguntar/?$#', '', env('PYTHON_API_URL', 'http://127.0.0.1:8001/perguntar')), '/'),
+        'internal_token' => env('RAG_SERVICE_INTERNAL_TOKEN') ?: env('PYTHON_INTERNAL_TOKEN'),
     ],
 ];

@@ -2,47 +2,92 @@
 
 namespace App\Services;
 
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 
 class StudyPlanService
 {
     public function generate(array $data): array
     {
-        $ragBaseUrl = config('services.rag.base_url', 'http://127.0.0.1:8001');
-        $internalToken = config('services.rag.internal_token');
+        $ragBaseUrl = rtrim((string) config('services.rag.base_url', ''), '/');
+        $internalToken = trim((string) config('services.rag.internal_token', ''));
 
-        if (empty($data['material_ids'])) {
-            abort(422, 'Não foram fornecidos materiais suficientes para gerar um plano de estudo.');
+        if ($ragBaseUrl === '' || $internalToken === '') {
+            Log::error('[TUTS][StudyPlan] RAG study-plan service is not configured', [
+                'has_base_url' => $ragBaseUrl !== '',
+                'has_internal_token' => $internalToken !== '',
+            ]);
+
+            throw new \RuntimeException('Serviço de planos de estudo indisponível.', 503);
         }
 
-        // Mapeamento dos materiais para a estrutura esperada pela RAG: id, title, type
-        $materials = [];
-        foreach ($data['material_ids'] as $matId) {
-            $materials[] = [
-                'id' => $matId,
-                'title' => 'Material ' . $matId,
-                'type' => 'pdf'
-            ];
-        }
+        $subject = $data['subject'];
 
         $payload = [
-            'subject_id' => $data['subject_id'],
-            'subject_name' => $data['subject_name'],
+            'subject_id' => $subject['id'],
+            'subject_name' => $subject['name'],
             'context' => $data['context'],
-            'materials' => $materials,
+            'materials' => $data['materials'],
             'duration_weeks' => (int) $data['duration_weeks'],
             'sessions_per_week' => (int) $data['sessions_per_week']
         ];
 
-        $response = Http::withHeaders([
-            'X-Internal-Token' => $internalToken,
-            'Content-Type' => 'application/json'
-        ])->post("{$ragBaseUrl}/api/study-plans/generate", $payload);
+        try {
+            $response = Http::timeout(30)
+                ->connectTimeout(10)
+                ->acceptJson()
+                ->asJson()
+                ->withHeaders([
+                    'X-Internal-Token' => $internalToken,
+                ])
+                ->post("{$ragBaseUrl}/api/study-plans/generate", $payload);
+        } catch (ConnectionException $e) {
+            Log::warning('[TUTS][StudyPlan] failed to communicate with RAG', [
+                'subject_id' => $subject['id'],
+                'user_id' => $data['user_id'] ?? null,
+                'error' => mb_substr($e->getMessage(), 0, 250),
+            ]);
 
-        if ($response->failed()) {
-            throw new \Exception("Erro ao comunicar com o serviço RAG: HTTP " . $response->status() . " - " . $response->body());
+            throw new \RuntimeException('Serviço de planos de estudo indisponível.', 503);
         }
 
-        return $response->json();
+        if ($response->failed()) {
+            $safeMessage = $this->extractErrorMessage($response->json());
+
+            Log::warning('[TUTS][StudyPlan] non-success response from RAG', [
+                'subject_id' => $subject['id'],
+                'user_id' => $data['user_id'] ?? null,
+                'http_status' => $response->status(),
+                'error_detail' => $safeMessage,
+            ]);
+
+            throw new \RuntimeException($safeMessage ?: 'Erro ao gerar plano de estudo.', 502);
+        }
+
+        $plan = $response->json();
+
+        return is_array($plan) ? $plan : [];
+    }
+
+    private function extractErrorMessage(mixed $payload): ?string
+    {
+        if (!is_array($payload)) {
+            return null;
+        }
+
+        $message = $payload['detail'] ?? $payload['message'] ?? null;
+
+        if (is_array($message)) {
+            $message = $message['message'] ?? $message['msg'] ?? $message['detail'] ?? null;
+        }
+
+        if (!is_string($message)) {
+            return null;
+        }
+
+        $message = preg_replace('/\s+/u', ' ', trim($message));
+
+        return $message !== '' ? mb_substr($message, 0, 500) : null;
     }
 }
