@@ -6,7 +6,11 @@ use App\Http\Controllers\Controller;
 use App\Models\Subject;
 use App\Models\SubjectMaterial;
 use App\Models\SubjectSection;
+use App\Models\User;
+use App\Services\RagIngestionService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
@@ -60,6 +64,36 @@ class SubjectOfficialContentController extends Controller
         ]);
     }
 
+    public function ingestMaterial(Request $request, string $subject, SubjectMaterial $material, RagIngestionService $ragIngestion): JsonResponse
+    {
+        $resolvedSubject = $this->resolveSubject($subject);
+        $user = $this->user($request);
+
+        abort_unless((int) $material->subject_id === (int) $resolvedSubject->id, 404);
+        abort_unless($this->canTeachSubject($user, $resolvedSubject), 403, 'Sem permissao para indexar materiais desta UC.');
+
+        Log::info('official_subject_materials.ingest.enter', [
+            'user_id' => $user->id,
+            'subject_id' => $resolvedSubject->id,
+            'material_id' => $material->id,
+            'section_id' => $material->section_id,
+            'mime_type' => $material->mime_type,
+            'size_bytes' => $material->size_bytes,
+        ]);
+
+        $result = $ragIngestion->ingestSubjectMaterial($material);
+
+        return response()->json([
+            'status' => 'sucesso',
+            'material' => $this->formatMaterial($material->fresh()),
+            'rag_ingestion' => [
+                'status' => $result['status'] ?? 'failed',
+                'message' => $result['message'] ?? 'Material guardado, mas ainda nao ficou pesquisavel pelo RAG.',
+                'reason' => $result['reason'] ?? null,
+            ],
+        ]);
+    }
+
     private function resolveSubject(string $subject): Subject
     {
         $subjectId = Str::startsWith($subject, 'uc-') ? Str::after($subject, 'uc-') : $subject;
@@ -67,6 +101,31 @@ class SubjectOfficialContentController extends Controller
         abort_unless(ctype_digit((string) $subjectId), 404);
 
         return Subject::query()->findOrFail($subjectId);
+    }
+
+    private function user(Request $request): User
+    {
+        $user = $request->user();
+
+        if (!$user) {
+            abort(401, 'Utilizador nao autenticado.');
+        }
+
+        return $user;
+    }
+
+    private function canTeachSubject(User $user, Subject $subject): bool
+    {
+        if ((int) $subject->created_by === (int) $user->id) {
+            return true;
+        }
+
+        return DB::table('subject_user')
+            ->where('subject_id', $subject->id)
+            ->where('user_id', $user->id)
+            ->where('role', 'teacher')
+            ->where('status', 'active')
+            ->exists();
     }
 
     private function formatSection(SubjectSection $section): array
