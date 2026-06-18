@@ -46,4 +46,8 @@ return [
         'token' => env('METRICS_TOKEN'),
     ],
 
+    'rag' => [
+        'base_url' => env('RAG_SERVICE_BASE_URL', 'http://127.0.0.1:8001'),
+        'internal_token' => env('RAG_SERVICE_INTERNAL_TOKEN'),
+    ],
 ];

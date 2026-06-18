@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\InternalMessageController;
 use App\Http\Controllers\Api\HealthController;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\Api\StudyPlanController;
 
 /*
 |--------------------------------------------------------------------------
@@ -43,3 +44,5 @@ Route::middleware(['throttle:internal', 'internal.api'])->group(function () {
     // Mantivemos a mesma rota que está configurada no services/analise.py do Python
     Route::post('/messages/{id}/metadata', [InternalMessageController::class, 'guardarMetadata']);
 });
+
+Route::post('/study-plans', [StudyPlanController::class, 'store'])->middleware('auth:sanctum');
