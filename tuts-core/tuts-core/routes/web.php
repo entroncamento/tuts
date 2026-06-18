@@ -1,15 +1,20 @@
 <?php
 
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\AvailabilityBlockController;
 use App\Http\Controllers\Api\ChatController;
+use App\Http\Controllers\Api\CalendarController;
+use App\Http\Controllers\Api\CalendarItemController;
 use App\Http\Controllers\Api\CourseController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\PersonalMaterialController;
+use App\Http\Controllers\Api\ReminderController;
 use App\Http\Controllers\Api\SpaceFolderController;
 use App\Http\Controllers\Api\SpaceMaterialController;
 use App\Http\Controllers\Api\StudySpaceController;
 use App\Http\Controllers\Api\SubjectController;
 use App\Http\Controllers\Api\SubjectOfficialContentController;
+use App\Http\Controllers\Api\TeacherEventController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -47,6 +52,35 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::patch('/read-all', [NotificationController::class, 'markAllAsRead']);
         Route::patch('/{notification}/read', [NotificationController::class, 'markAsRead']);
         Route::delete('/{notification}', [NotificationController::class, 'destroy']);
+    });
+
+    Route::prefix('api/calendar')->group(function () {
+        Route::get('/items', [CalendarController::class, 'items']);
+        Route::get('/upcoming', [CalendarController::class, 'upcoming']);
+        Route::post('/items', [CalendarItemController::class, 'store'])->middleware('throttle:30,1');
+        Route::patch('/items/{item}', [CalendarItemController::class, 'update']);
+        Route::delete('/items/{item}', [CalendarItemController::class, 'destroy']);
+    });
+
+    Route::prefix('api/reminders')->group(function () {
+        Route::get('/', [ReminderController::class, 'index']);
+        Route::post('/', [ReminderController::class, 'store'])->middleware('throttle:30,1');
+        Route::patch('/{reminder}/complete', [ReminderController::class, 'complete']);
+        Route::delete('/{reminder}', [ReminderController::class, 'destroy']);
+    });
+
+    Route::prefix('api/availability-blocks')->group(function () {
+        Route::get('/', [AvailabilityBlockController::class, 'index']);
+        Route::post('/', [AvailabilityBlockController::class, 'store'])->middleware('throttle:30,1');
+        Route::patch('/{block}', [AvailabilityBlockController::class, 'update']);
+        Route::delete('/{block}', [AvailabilityBlockController::class, 'destroy']);
+    });
+
+    Route::prefix('api/teacher-events')->group(function () {
+        Route::get('/', [TeacherEventController::class, 'index']);
+        Route::post('/', [TeacherEventController::class, 'store'])->middleware('throttle:30,1');
+        Route::patch('/{event}', [TeacherEventController::class, 'update']);
+        Route::delete('/{event}', [TeacherEventController::class, 'destroy']);
     });
 
     Route::prefix('api/spaces')->group(function () {

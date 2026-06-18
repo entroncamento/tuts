@@ -62,6 +62,26 @@ class User extends Authenticatable implements MustVerifyEmail
             ->wherePivot('status', 'active');
     }
 
+    public function calendarItems(): HasMany
+    {
+        return $this->hasMany(CalendarItem::class);
+    }
+
+    public function reminders(): HasMany
+    {
+        return $this->hasMany(Reminder::class);
+    }
+
+    public function availabilityBlocks(): HasMany
+    {
+        return $this->hasMany(AvailabilityBlock::class);
+    }
+
+    public function teacherEventsCreated(): HasMany
+    {
+        return $this->hasMany(TeacherEvent::class, 'created_by');
+    }
+
     public function chats()
     {
         return $this->hasMany(Chat::class);

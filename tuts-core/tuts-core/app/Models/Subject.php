@@ -78,4 +78,14 @@ class Subject extends Model
     {
         return $this->hasMany(SubjectMaterial::class);
     }
+
+    public function calendarItems(): HasMany
+    {
+        return $this->hasMany(CalendarItem::class);
+    }
+
+    public function teacherEvents(): HasMany
+    {
+        return $this->hasMany(TeacherEvent::class);
+    }
 }
