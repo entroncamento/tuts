@@ -15,6 +15,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 
 class SubjectOfficialContentController extends Controller
 {
@@ -39,16 +40,30 @@ class SubjectOfficialContentController extends Controller
         'text/plain',
     ];
 
-    public function sections(string $subject): JsonResponse
+    public function sections(Request $request, string $subject): JsonResponse
     {
         $resolvedSubject = $this->resolveSubject($subject);
+        $user = $this->user($request);
+        $canTeach = $this->canTeachSubject($user, $resolvedSubject);
+
+        abort_unless($canTeach || $this->canViewSubject($user, $resolvedSubject), 403, 'Sem acesso a esta UC.');
 
         Log::info('official_subject_sections.enter', [
+            'user_id' => $user->id,
             'subject_id' => $resolvedSubject->id,
         ]);
 
         $sections = $resolvedSubject->sections()
             ->withCount('materials')
+            ->when(!$canTeach, function ($query) {
+                $query
+                    ->where('visible_to_students', true)
+                    ->where(function ($visibilityQuery) {
+                        $visibilityQuery
+                            ->whereNull('visible_from')
+                            ->orWhere('visible_from', '<=', now());
+                    });
+            })
             ->orderBy('order')
             ->orderBy('name')
             ->get();
@@ -63,15 +78,149 @@ class SubjectOfficialContentController extends Controller
         ]);
     }
 
-    public function materials(string $subject): JsonResponse
+    public function storeSection(Request $request, string $subject): JsonResponse
     {
         $resolvedSubject = $this->resolveSubject($subject);
+        $user = $this->user($request);
+
+        Log::info('[TUTS][SubjectSections] create requested', [
+            'user_id' => $user->id,
+            'subject_id' => $resolvedSubject->id,
+        ]);
+
+        $this->authorizeSectionWrite($user, $resolvedSubject);
+
+        $validated = $request->validate([
+            'title' => 'required_without:name|nullable|string|max:255',
+            'name' => 'required_without:title|nullable|string|max:255',
+            'description' => 'nullable|string',
+            'visible_to_students' => 'nullable|boolean',
+            'visible_from' => 'nullable|date',
+            'order' => 'nullable|integer|min:0',
+            'index' => 'nullable|integer|min:0',
+        ]);
+
+        $name = $this->sectionNameFromPayload($validated, true);
+        $order = $this->sectionOrderFromPayload($validated)
+            ?? ((int) $resolvedSubject->sections()->max('order') + 1);
+
+        $section = $resolvedSubject->sections()->create([
+            'name' => $name,
+            'description' => $validated['description'] ?? null,
+            'visible_to_students' => $validated['visible_to_students'] ?? true,
+            'visible_from' => $validated['visible_from'] ?? null,
+            'order' => $order,
+        ]);
+
+        return response()->json([
+            'status' => 'sucesso',
+            'section' => $this->formatSection($section->fresh()),
+        ], 201);
+    }
+
+    public function updateSection(Request $request, string $subject, SubjectSection $section): JsonResponse
+    {
+        $resolvedSubject = $this->resolveSubject($subject);
+        $user = $this->user($request);
+        $this->ensureSectionBelongsToSubject($section, $resolvedSubject);
+
+        Log::info('[TUTS][SubjectSections] update requested', [
+            'user_id' => $user->id,
+            'subject_id' => $resolvedSubject->id,
+            'section_id' => $section->id,
+        ]);
+
+        $this->authorizeSectionWrite($user, $resolvedSubject);
+
+        $validated = $request->validate([
+            'title' => 'sometimes|nullable|string|max:255',
+            'name' => 'sometimes|nullable|string|max:255',
+            'description' => 'sometimes|nullable|string',
+            'visible_to_students' => 'sometimes|boolean',
+            'visible_from' => 'sometimes|nullable|date',
+            'order' => 'sometimes|nullable|integer|min:0',
+            'index' => 'sometimes|nullable|integer|min:0',
+        ]);
+
+        $updates = [];
+        $name = $this->sectionNameFromPayload($validated, false);
+
+        if ($name !== null) {
+            $updates['name'] = $name;
+        }
+
+        foreach (['description', 'visible_to_students', 'visible_from'] as $field) {
+            if (array_key_exists($field, $validated)) {
+                $updates[$field] = $validated[$field];
+            }
+        }
+
+        $order = $this->sectionOrderFromPayload($validated);
+        if ($order !== null) {
+            $updates['order'] = $order;
+        }
+
+        if ($updates) {
+            $section->update($updates);
+        }
+
+        return response()->json([
+            'status' => 'sucesso',
+            'section' => $this->formatSection($section->fresh()),
+        ]);
+    }
+
+    public function destroySection(Request $request, string $subject, SubjectSection $section): JsonResponse
+    {
+        $resolvedSubject = $this->resolveSubject($subject);
+        $user = $this->user($request);
+        $this->ensureSectionBelongsToSubject($section, $resolvedSubject);
+
+        Log::info('[TUTS][SubjectSections] delete requested', [
+            'user_id' => $user->id,
+            'subject_id' => $resolvedSubject->id,
+            'section_id' => $section->id,
+        ]);
+
+        $this->authorizeSectionWrite($user, $resolvedSubject);
+
+        $section->delete();
+
+        return response()->json([
+            'status' => 'sucesso',
+            'message' => 'Secção apagada com sucesso.',
+        ]);
+    }
+
+    public function materials(Request $request, string $subject): JsonResponse
+    {
+        $resolvedSubject = $this->resolveSubject($subject);
+        $user = $this->user($request);
+        $canTeach = $this->canTeachSubject($user, $resolvedSubject);
+
+        abort_unless($canTeach || $this->canViewSubject($user, $resolvedSubject), 403, 'Sem acesso a esta UC.');
 
         Log::info('official_subject_materials.enter', [
+            'user_id' => $user->id,
             'subject_id' => $resolvedSubject->id,
         ]);
 
         $materials = $resolvedSubject->materials()
+            ->when(!$canTeach, function ($query) {
+                $query->where(function ($materialQuery) {
+                    $materialQuery
+                        ->whereNull('section_id')
+                        ->orWhereHas('section', function ($sectionQuery) {
+                            $sectionQuery
+                                ->where('visible_to_students', true)
+                                ->where(function ($visibilityQuery) {
+                                    $visibilityQuery
+                                        ->whereNull('visible_from')
+                                        ->orWhere('visible_from', '<=', now());
+                                });
+                        });
+                });
+            })
             ->orderBy('section_id')
             ->orderBy('created_at')
             ->orderBy('name')
@@ -311,15 +460,94 @@ class SubjectOfficialContentController extends Controller
             ->exists();
     }
 
+    private function canViewSubject(User $user, Subject $subject): bool
+    {
+        if ($this->canTeachSubject($user, $subject)) {
+            return true;
+        }
+
+        return DB::table('subject_user')
+            ->where('subject_id', $subject->id)
+            ->where('user_id', $user->id)
+            ->where('role', 'student')
+            ->where('status', 'active')
+            ->exists();
+    }
+
+    private function authorizeSectionWrite(User $user, Subject $subject): void
+    {
+        if ($this->canTeachSubject($user, $subject)) {
+            return;
+        }
+
+        Log::warning('[TUTS][SubjectSections] authorization failed', [
+            'user_id' => $user->id,
+            'subject_id' => $subject->id,
+        ]);
+
+        abort(403, 'Sem permissao para gerir secções desta UC.');
+    }
+
+    private function ensureSectionBelongsToSubject(SubjectSection $section, Subject $subject): void
+    {
+        abort_unless((int) $section->subject_id === (int) $subject->id, 404);
+    }
+
+    private function sectionNameFromPayload(array $payload, bool $required): ?string
+    {
+        foreach (['title', 'name'] as $field) {
+            if (array_key_exists($field, $payload) && $payload[$field] !== null && trim((string) $payload[$field]) === '') {
+                throw ValidationException::withMessages([
+                    $field => 'O nome da secção não pode estar vazio.',
+                ]);
+            }
+        }
+
+        if (array_key_exists('title', $payload) && $payload['title'] !== null) {
+            return trim((string) $payload['title']);
+        }
+
+        if (array_key_exists('name', $payload) && $payload['name'] !== null) {
+            return trim((string) $payload['name']);
+        }
+
+        if ($required) {
+            throw ValidationException::withMessages([
+                'title' => 'Indica o título da secção.',
+            ]);
+        }
+
+        return null;
+    }
+
+    private function sectionOrderFromPayload(array $payload): ?int
+    {
+        if (array_key_exists('order', $payload) && $payload['order'] !== null) {
+            return (int) $payload['order'];
+        }
+
+        if (array_key_exists('index', $payload) && $payload['index'] !== null) {
+            return (int) $payload['index'];
+        }
+
+        return null;
+    }
+
     private function formatSection(SubjectSection $section): array
     {
         return [
-            'id' => (string) $section->id,
-            'subject_id' => (string) $section->subject_id,
+            'id' => (int) $section->id,
+            'subject_id' => (int) $section->subject_id,
             'name' => $section->name,
+            'title' => $section->name,
             'description' => $section->description,
-            'order' => $section->order,
+            'visible_to_students' => (bool) $section->visible_to_students,
+            'visible_from' => $section->visible_from?->toISOString(),
+            'order' => (int) $section->order,
+            'index' => (int) $section->order,
             'material_count' => $section->materials_count ?? 0,
+            'created_at' => $section->created_at?->toISOString(),
+            'updated_at' => $section->updated_at?->toISOString(),
         ];
     }
 

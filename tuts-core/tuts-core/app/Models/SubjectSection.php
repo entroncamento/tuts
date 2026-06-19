@@ -15,10 +15,14 @@ class SubjectSection extends Model
         'subject_id',
         'name',
         'description',
+        'visible_to_students',
+        'visible_from',
         'order',
     ];
 
     protected $casts = [
+        'visible_to_students' => 'boolean',
+        'visible_from' => 'datetime',
         'order' => 'integer',
     ];
 

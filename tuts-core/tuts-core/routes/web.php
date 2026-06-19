@@ -40,6 +40,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/api/subjects', [SubjectController::class, 'store'])->middleware('throttle:30,1');
     Route::post('/api/subjects/join', [SubjectController::class, 'join'])->middleware('throttle:30,1');
     Route::get('/api/subjects/{subject}/sections', [SubjectOfficialContentController::class, 'sections']);
+    Route::post('/api/subjects/{subject}/sections', [SubjectOfficialContentController::class, 'storeSection'])
+        ->middleware('throttle:30,1');
+    Route::patch('/api/subjects/{subject}/sections/{section}', [SubjectOfficialContentController::class, 'updateSection'])
+        ->middleware('throttle:30,1');
+    Route::delete('/api/subjects/{subject}/sections/{section}', [SubjectOfficialContentController::class, 'destroySection'])
+        ->middleware('throttle:30,1');
     Route::get('/api/subjects/{subject}/materials', [SubjectOfficialContentController::class, 'materials']);
     Route::post('/api/subjects/{subject}/materials', [SubjectOfficialContentController::class, 'storeMaterial'])
         ->middleware('throttle:20,1');
