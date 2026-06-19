@@ -3,14 +3,61 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\User;
+use Illuminate\Auth\Events\Registered;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use Illuminate\Validation\Rules;
 
 class AuthController extends Controller
 {
+    /**
+     * Registo API — cria apenas contas de aluno e envia email de verificação.
+     * Não inicia sessão; o frontend deve encaminhar para login após verificação.
+     */
+    public function register(Request $request)
+    {
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
+            'email' => [
+                'required',
+                'string',
+                'lowercase',
+                'email',
+                'max:255',
+                'unique:' . User::class,
+                'ends_with:@ua.pt',
+            ],
+            'password' => ['required', 'confirmed', Rules\Password::defaults()],
+            'role' => 'prohibited',
+            'professor_key' => 'prohibited',
+        ]);
+
+        $user = User::create([
+            'name' => $validated['name'],
+            'email' => $validated['email'],
+            'password' => Hash::make($validated['password']),
+            'role' => 'aluno',
+        ]);
+
+        event(new Registered($user));
+
+        return response()->json([
+            'status' => 'sucesso',
+            'message' => 'Conta criada com sucesso. Verifica o teu email antes de iniciar sessão.',
+            'user' => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+                'role' => $user->role,
+            ],
+        ], 201);
+    }
+
     /**
      * Login — autentica o utilizador e inicia a sessão Sanctum.
      * O browser guarda o cookie de sessão automaticamente.
