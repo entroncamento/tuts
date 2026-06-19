@@ -31,6 +31,7 @@ class StudyPlanController extends Controller
             'material_ids.*' => 'integer|distinct',
             'duration_weeks' => 'required|integer|min:1|max:16',
             'sessions_per_week' => 'required|integer|min:1|max:14',
+            'adaptability_preferences' => 'nullable|array',
         ]);
 
         $user = $request->user();
@@ -68,6 +69,7 @@ class StudyPlanController extends Controller
                 'materials' => $materials,
                 'duration_weeks' => (int) $validated['duration_weeks'],
                 'sessions_per_week' => (int) $validated['sessions_per_week'],
+                'adaptability_preferences' => $validated['adaptability_preferences'] ?? null,
             ]);
 
             return response()->json([

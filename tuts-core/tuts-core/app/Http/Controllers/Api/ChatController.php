@@ -647,6 +647,7 @@ class ChatController extends Controller
             'preferencia' => 'nullable|string|in:default,visual,plano,quiz,feynman',
             'imagem' => 'nullable|image|max:4096',
             'attachedMaterialRefs' => 'nullable|string',
+            'adaptability_preferences' => 'nullable',
         ]);
 
         $userId = $this->requireAuthenticatedUserId();
@@ -773,6 +774,15 @@ class ChatController extends Controller
 
         $texto = $request->texto;
         $preferencia = $request->input('preferencia', 'default');
+        $adaptabilityPreferences = $request->input('adaptability_preferences');
+
+        if (is_array($adaptabilityPreferences)) {
+            $adaptabilityPreferences = json_encode($adaptabilityPreferences, JSON_UNESCAPED_UNICODE);
+        }
+
+        if (!is_string($adaptabilityPreferences) || trim($adaptabilityPreferences) === '') {
+            $adaptabilityPreferences = null;
+        }
         $requestId = Context::get('request_id');
         $uc = match ($contextType) {
             'uc' => $subject?->name ?? (string) $request->uc,
@@ -844,7 +854,8 @@ class ChatController extends Controller
             $subjectMaterialIds,
             $spaceMaterialIds,
             $requestId,
-            $userId
+            $userId,
+            $adaptabilityPreferences
         ) {
             // Prevenir interrupção prematura do script pelo PHP
             ignore_user_abort(true);
@@ -881,6 +892,10 @@ class ChatController extends Controller
                 'context_type' => $contextType,
                 'chat_id' => $chatId,
             ];
+
+            if ($adaptabilityPreferences !== null) {
+                $postFields['adaptability_preferences'] = $adaptabilityPreferences;
+            }
 
             [$personalFiles, $personalFileRefs, $personalTempPaths] = $this->preparePersonalFilesForRag(
                 $attachedMaterialRefs,

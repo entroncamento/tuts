@@ -33,6 +33,10 @@ class StudyPlanService
             'sessions_per_week' => (int) $data['sessions_per_week']
         ];
 
+        if (isset($data['adaptability_preferences']) && is_array($data['adaptability_preferences'])) {
+            $payload['adaptability_preferences'] = $data['adaptability_preferences'];
+        }
+
         try {
             $response = Http::timeout(30)
                 ->connectTimeout(10)
