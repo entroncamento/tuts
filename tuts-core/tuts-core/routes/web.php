@@ -48,6 +48,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/api/subjects/{subject}/students', [SubjectController::class, 'students']);
     Route::get('/api/subjects/{subject}', [SubjectController::class, 'show']);
     Route::patch('/api/subjects/{subject}', [SubjectController::class, 'update']);
+    Route::delete('/api/subjects/{subject}', [SubjectController::class, 'destroy']);
 
     Route::prefix('api/notifications')->group(function () {
         Route::get('/', [NotificationController::class, 'index']);

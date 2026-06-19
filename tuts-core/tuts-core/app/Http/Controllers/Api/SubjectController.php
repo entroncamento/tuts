@@ -150,6 +150,57 @@ class SubjectController extends Controller
         ]);
     }
 
+    public function destroy(Request $request, string $subject): JsonResponse
+    {
+        $user = $this->user($request);
+        $resolvedSubject = $this->resolveSubject($subject);
+        $membershipCategory = $this->membershipCategory($user, $resolvedSubject);
+
+        Log::info('[TUTS][Subjects] delete request received', [
+            'user_id' => $user->id,
+            'subject_id' => $resolvedSubject->id,
+            'membership_category' => $membershipCategory,
+        ]);
+
+        if (!$this->canTeachSubject($user, $resolvedSubject)) {
+            $this->logForbidden('delete', $user, $resolvedSubject);
+            abort(403, 'Sem permissao para apagar esta UC.');
+        }
+
+        Log::info('[TUTS][Subjects] delete authorization passed', [
+            'user_id' => $user->id,
+            'subject_id' => $resolvedSubject->id,
+            'membership_category' => $membershipCategory,
+        ]);
+
+        try {
+            $resolvedSubject->delete();
+        } catch (\Throwable $exception) {
+            Log::warning('[TUTS][Subjects] delete failed', [
+                'user_id' => $user->id,
+                'subject_id' => $resolvedSubject->id,
+                'membership_category' => $membershipCategory,
+                'error_category' => $exception::class,
+            ]);
+
+            return response()->json([
+                'status' => 'erro',
+                'message' => 'Nao foi possivel apagar a UC.',
+            ], 500);
+        }
+
+        Log::info('[TUTS][Subjects] subject soft deleted', [
+            'user_id' => $user->id,
+            'subject_id' => $resolvedSubject->id,
+            'membership_category' => $membershipCategory,
+        ]);
+
+        return response()->json([
+            'status' => 'sucesso',
+            'message' => 'UC apagada com sucesso.',
+        ]);
+    }
+
     public function teachingSubjects(Request $request): JsonResponse
     {
         $user = $this->user($request);
@@ -356,6 +407,17 @@ class SubjectController extends Controller
             ->first();
 
         return is_string($membership?->role ?? null) ? $membership->role : null;
+    }
+
+    private function membershipCategory(User $user, Subject $subject): string
+    {
+        if ((int) $subject->created_by === (int) $user->id) {
+            return 'creator';
+        }
+
+        $role = $this->membershipRole($user, $subject);
+
+        return $role ? 'active_' . $role : 'none';
     }
 
     private function upsertMembership(Subject $subject, User $user, string $role, string $source): void
