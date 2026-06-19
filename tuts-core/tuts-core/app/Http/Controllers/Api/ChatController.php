@@ -18,10 +18,14 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Context;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 
 class ChatController extends Controller
 {
+    private const MAX_PERSONAL_FILES_PER_MESSAGE = 3;
+    private const MAX_PERSONAL_ATTACHMENT_BYTES = 5 * 1024 * 1024;
+
     protected $ragService;
 
     public function __construct(RagService $ragService)
@@ -297,7 +301,182 @@ class ChatController extends Controller
             ];
         }
 
+        if (collect($resolved)->where('source', 'personal')->count() > self::MAX_PERSONAL_FILES_PER_MESSAGE) {
+            throw ValidationException::withMessages([
+                'attachedMaterialRefs' => 'Não podes anexar mais de 3 materiais pessoais por mensagem.',
+            ]);
+        }
+
         return $resolved;
+    }
+
+    private function preparePersonalFilesForRag(array $attachedMaterialRefs, int $userId, int $chatId, int $messageId): array
+    {
+        $personalRefs = collect($attachedMaterialRefs)
+            ->where('source', 'personal')
+            ->values();
+
+        if ($personalRefs->isEmpty()) {
+            return [[], [], []];
+        }
+
+        Log::info('[TUTS][Chat][Personal Attachments] resolving personal refs', [
+            'user_id' => $userId,
+            'chat_id' => $chatId,
+            'message_id' => $messageId,
+            'count' => $personalRefs->count(),
+        ]);
+
+        $files = [];
+        $metadata = [];
+        $tempPaths = [];
+        $totalBytes = 0;
+
+        foreach ($personalRefs as $ref) {
+            $materialId = (int) ($ref['material_id'] ?? 0);
+            $baseMeta = [
+                'source' => 'personal',
+                'material_id' => $materialId,
+                'owner_user_id' => $userId,
+                'filename' => (string) ($ref['display_name'] ?? 'material'),
+                'title' => (string) ($ref['display_name'] ?? 'material'),
+                'mime_type' => (string) ($ref['mime_type'] ?? 'application/octet-stream'),
+                'size_bytes' => (int) ($ref['size_bytes'] ?? 0),
+                'temporary' => true,
+            ];
+
+            $material = PersonalMaterial::query()
+                ->where('id', $materialId)
+                ->where('owner_id', $userId)
+                ->first();
+
+            if (!$material) {
+                $metadata[] = $baseMeta + ['status' => 'skipped', 'skip_reason' => 'not_authorized'];
+                Log::warning('[TUTS][Chat][Personal Attachments] personal file skipped', [
+                    'user_id' => $userId,
+                    'chat_id' => $chatId,
+                    'message_id' => $messageId,
+                    'material_id' => $materialId,
+                    'skip_reason' => 'not_authorized',
+                ]);
+                continue;
+            }
+
+            $sizeBytes = (int) $material->size_bytes;
+            $safeMeta = [
+                'source' => 'personal',
+                'material_id' => (int) $material->id,
+                'owner_user_id' => $userId,
+                'filename' => (string) $material->original_name,
+                'title' => (string) $material->original_name,
+                'mime_type' => (string) ($material->mime_type ?: 'application/octet-stream'),
+                'size_bytes' => $sizeBytes,
+                'temporary' => true,
+            ];
+
+            Log::info('[TUTS][Chat][Personal Attachments] personal file authorized', [
+                'user_id' => $userId,
+                'chat_id' => $chatId,
+                'message_id' => $messageId,
+                'material_id' => $material->id,
+                'mime_type' => $material->mime_type,
+                'size_bytes' => $sizeBytes,
+            ]);
+
+            if ($sizeBytes <= 0 || $totalBytes + $sizeBytes > self::MAX_PERSONAL_ATTACHMENT_BYTES) {
+                $metadata[] = $safeMeta + ['status' => 'skipped', 'skip_reason' => 'size_limit_exceeded'];
+                Log::warning('[TUTS][Chat][Personal Attachments] personal file skipped', [
+                    'user_id' => $userId,
+                    'chat_id' => $chatId,
+                    'message_id' => $messageId,
+                    'material_id' => $material->id,
+                    'mime_type' => $material->mime_type,
+                    'size_bytes' => $sizeBytes,
+                    'skip_reason' => 'size_limit_exceeded',
+                ]);
+                continue;
+            }
+
+            $stream = false;
+
+            try {
+                $stream = Storage::disk($material->storage_disk)->readStream($material->storage_key);
+            } catch (\Throwable) {
+                $stream = false;
+            }
+
+            if (!is_resource($stream)) {
+                $metadata[] = $safeMeta + ['status' => 'skipped', 'skip_reason' => 'file_not_readable'];
+                Log::warning('[TUTS][Chat][Personal Attachments] personal file skipped', [
+                    'user_id' => $userId,
+                    'chat_id' => $chatId,
+                    'message_id' => $messageId,
+                    'material_id' => $material->id,
+                    'mime_type' => $material->mime_type,
+                    'size_bytes' => $sizeBytes,
+                    'skip_reason' => 'file_not_readable',
+                ]);
+                continue;
+            }
+
+            $tempPath = tempnam(sys_get_temp_dir(), 'tuts-personal-');
+            $out = $tempPath ? fopen($tempPath, 'wb') : false;
+
+            if (!is_resource($out)) {
+                if (is_resource($stream)) {
+                    fclose($stream);
+                }
+
+                $metadata[] = $safeMeta + ['status' => 'skipped', 'skip_reason' => 'temp_file_failed'];
+                Log::warning('[TUTS][Chat][Personal Attachments] personal file skipped', [
+                    'user_id' => $userId,
+                    'chat_id' => $chatId,
+                    'message_id' => $messageId,
+                    'material_id' => $material->id,
+                    'mime_type' => $material->mime_type,
+                    'size_bytes' => $sizeBytes,
+                    'skip_reason' => 'temp_file_failed',
+                ]);
+                continue;
+            }
+
+            stream_copy_to_stream($stream, $out);
+            fclose($stream);
+            fclose($out);
+
+            $uploadIndex = count($files);
+            $safeMeta['status'] = 'attached';
+            $safeMeta['upload_index'] = $uploadIndex;
+            $metadata[] = $safeMeta;
+            $files[] = [
+                'field' => "personal_files[{$uploadIndex}]",
+                'path' => $tempPath,
+                'name' => basename((string) $material->original_name),
+                'mime_type' => $safeMeta['mime_type'],
+            ];
+            $tempPaths[] = $tempPath;
+            $totalBytes += $sizeBytes;
+
+            Log::info('[TUTS][Chat][Personal Attachments] personal file attached to RAG request', [
+                'user_id' => $userId,
+                'chat_id' => $chatId,
+                'message_id' => $messageId,
+                'material_id' => $material->id,
+                'mime_type' => $material->mime_type,
+                'size_bytes' => $sizeBytes,
+            ]);
+        }
+
+        Log::info('[TUTS][Chat][Personal Attachments] personal temporary retrieval requested', [
+            'user_id' => $userId,
+            'chat_id' => $chatId,
+            'message_id' => $messageId,
+            'requested_count' => $personalRefs->count(),
+            'attached_count' => count($files),
+            'total_bytes' => $totalBytes,
+        ]);
+
+        return [$files, $metadata, $tempPaths];
     }
 
     private function formatMaterialRef($ref): array
@@ -664,7 +843,8 @@ class ChatController extends Controller
             $personalMaterialIds,
             $subjectMaterialIds,
             $spaceMaterialIds,
-            $requestId
+            $requestId,
+            $userId
         ) {
             // Prevenir interrupção prematura do script pelo PHP
             ignore_user_abort(true);
@@ -702,6 +882,21 @@ class ChatController extends Controller
                 'chat_id' => $chatId,
             ];
 
+            [$personalFiles, $personalFileRefs, $personalTempPaths] = $this->preparePersonalFilesForRag(
+                $attachedMaterialRefs,
+                $userId,
+                $chatId,
+                $userMessageId
+            );
+
+            if ($personalFileRefs) {
+                $postFields['personal_file_refs'] = json_encode($personalFileRefs, JSON_UNESCAPED_UNICODE);
+            }
+
+            foreach ($personalFiles as $file) {
+                $postFields[$file['field']] = new \CURLFile($file['path'], $file['mime_type'], $file['name']);
+            }
+
             Log::info('[TUTS][Chat][RAG] sending structured context', [
                 'chat_id' => $chatId,
                 'message_id' => $userMessageId,
@@ -713,6 +908,7 @@ class ChatController extends Controller
                 'personal_ids_count' => count($personalMaterialIds),
                 'subject_ids_count' => count($subjectMaterialIds),
                 'space_ids_count' => count($spaceMaterialIds),
+                'personal_files_count' => count($personalFiles),
             ]);
 
             if ($imagemPath && file_exists($imagemPath)) {
@@ -828,6 +1024,12 @@ class ChatController extends Controller
             }
 
             curl_close($ch);
+
+            foreach ($personalTempPaths ?? [] as $tempPath) {
+                if (is_string($tempPath) && $tempPath !== '' && file_exists($tempPath)) {
+                    @unlink($tempPath);
+                }
+            }
 
             $falhouServicoIa = $ok === false || $responseCode >= 400;
 
