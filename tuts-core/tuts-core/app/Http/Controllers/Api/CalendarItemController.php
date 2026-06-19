@@ -73,15 +73,16 @@ class CalendarItemController extends Controller
     private function validatedPayload(Request $request, bool $partial = false): array
     {
         $required = $partial ? 'sometimes|required' : 'required';
+        $requiredRules = $partial ? ['sometimes', 'required'] : ['required'];
 
         return $request->validate([
-            'kind' => [$required, Rule::in(['event', 'task'])],
+            'kind' => [...$requiredRules, Rule::in(['event', 'task'])],
             'title' => $required . '|string|max:255',
             'description' => 'nullable|string|max:4000',
             'start_at' => $required . '|date',
             'end_at' => $required . '|date|after:start_at',
             'all_day' => 'nullable|boolean',
-            'scope' => [$required, Rule::in(['personal', 'uc'])],
+            'scope' => [...$requiredRules, Rule::in(['personal', 'uc'])],
             'subject_id' => 'nullable|integer|exists:subjects,id',
             'location' => 'nullable|string|max:255',
             'color' => 'nullable|string|max:40',
