@@ -46,6 +46,11 @@ return [
         'token' => env('METRICS_TOKEN'),
     ],
 
+    'api_registration' => [
+        // Demo/dev/staging only. Keep false in production once real email delivery is configured.
+        'auto_verify' => env('TUTS_AUTO_VERIFY_API_REGISTER', false),
+    ],
+
     'rag' => [
         'base_url' => env('RAG_SERVICE_BASE_URL')
             ?: rtrim((string) preg_replace('#/perguntar/?$#', '', env('PYTHON_API_URL', 'http://127.0.0.1:8001/perguntar')), '/'),

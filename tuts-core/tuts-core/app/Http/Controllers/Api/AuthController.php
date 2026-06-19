@@ -37,6 +37,8 @@ class AuthController extends Controller
             'professor_key' => 'prohibited',
         ]);
 
+        $autoVerify = (bool) config('services.api_registration.auto_verify', false);
+
         $user = User::create([
             'name' => $validated['name'],
             'email' => $validated['email'],
@@ -44,11 +46,20 @@ class AuthController extends Controller
             'role' => 'aluno',
         ]);
 
-        event(new Registered($user));
+        if ($autoVerify) {
+            // Demo/dev/staging unblock only: enable while real email delivery is unavailable.
+            $user->forceFill([
+                'email_verified_at' => now(),
+            ])->save();
+        } else {
+            event(new Registered($user));
+        }
 
         return response()->json([
             'status' => 'sucesso',
-            'message' => 'Conta criada com sucesso. Verifica o teu email antes de iniciar sessão.',
+            'message' => $autoVerify
+                ? 'Conta criada com sucesso. Já podes iniciar sessão.'
+                : 'Conta criada com sucesso. Verifica o teu email antes de iniciar sessão.',
             'user' => [
                 'id' => $user->id,
                 'name' => $user->name,
