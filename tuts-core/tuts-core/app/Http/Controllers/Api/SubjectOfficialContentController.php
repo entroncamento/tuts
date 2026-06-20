@@ -426,6 +426,57 @@ class SubjectOfficialContentController extends Controller
         ]);
     }
 
+    public function destroyMaterial(Request $request, string $subject, SubjectMaterial $material): JsonResponse
+    {
+        $resolvedSubject = $this->resolveSubject($subject);
+        $user = $this->user($request);
+
+        abort_unless((int) $material->subject_id === (int) $resolvedSubject->id, 404);
+
+        Log::info('[TUTS][Subject Materials] delete requested', [
+            'user_id' => $user->id,
+            'subject_id' => $resolvedSubject->id,
+            'section_id' => $material->section_id,
+            'material_id' => $material->id,
+            'source' => $material->source,
+        ]);
+
+        abort_unless($this->canTeachSubject($user, $resolvedSubject), 403, 'Sem permissao para apagar materiais desta UC.');
+        abort_unless($material->source === 'official', 404);
+
+        try {
+            $this->deleteStoredMaterialFile($material);
+            $material->delete();
+        } catch (\Throwable $exception) {
+            Log::warning('[TUTS][Subject Materials] delete failed before database deletion completed', [
+                'user_id' => $user->id,
+                'subject_id' => $resolvedSubject->id,
+                'section_id' => $material->section_id,
+                'material_id' => $material->id,
+                'source' => $material->source,
+                'error_category' => $exception::class,
+            ]);
+
+            return response()->json([
+                'status' => 'erro',
+                'message' => 'Nao foi possivel apagar o material.',
+                'database_deleted' => false,
+            ], 500);
+        }
+
+        Log::info('[TUTS][Subject Materials] material soft deleted', [
+            'user_id' => $user->id,
+            'subject_id' => $resolvedSubject->id,
+            'section_id' => $material->section_id,
+            'material_id' => $material->id,
+        ]);
+
+        return response()->json([
+            'status' => 'sucesso',
+            'message' => 'Material apagado com sucesso.',
+        ]);
+    }
+
     private function resolveSubject(string $subject): Subject
     {
         $subjectId = Str::startsWith($subject, 'uc-') ? Str::after($subject, 'uc-') : $subject;
@@ -491,6 +542,25 @@ class SubjectOfficialContentController extends Controller
     private function ensureSectionBelongsToSubject(SubjectSection $section, Subject $subject): void
     {
         abort_unless((int) $section->subject_id === (int) $subject->id, 404);
+    }
+
+    private function deleteStoredMaterialFile(SubjectMaterial $material): void
+    {
+        $path = trim((string) $material->path);
+
+        if ($path === '') {
+            return;
+        }
+
+        $disk = Storage::disk('local');
+
+        if (!$disk->exists($path)) {
+            return;
+        }
+
+        if (!$disk->delete($path)) {
+            throw new \RuntimeException('subject_material_file_delete_failed');
+        }
     }
 
     private function sectionNameFromPayload(array $payload, bool $required): ?string

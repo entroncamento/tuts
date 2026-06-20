@@ -52,6 +52,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/api/subjects/{subject}/materials', [SubjectOfficialContentController::class, 'materials']);
     Route::post('/api/subjects/{subject}/materials', [SubjectOfficialContentController::class, 'storeMaterial'])
         ->middleware('throttle:20,1');
+    Route::delete('/api/subjects/{subject}/materials/{material}', [SubjectOfficialContentController::class, 'destroyMaterial'])
+        ->middleware('throttle:30,1');
     Route::post('/api/subjects/{subject}/materials/{material}/ingest', [SubjectOfficialContentController::class, 'ingestMaterial'])
         ->middleware('throttle:10,1');
     Route::get('/api/subjects/{subject}/students', [SubjectController::class, 'students']);
