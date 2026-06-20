@@ -14,6 +14,7 @@ class Chat extends Model
     protected $fillable = [
         'user_id',
         'subject_id',
+        'section_id',
         'study_space_id',
         'space_folder_id',
         'context_type',
@@ -22,6 +23,7 @@ class Chat extends Model
     ];
 
     protected $casts = [
+        'section_id' => 'integer',
         'is_temporary' => 'boolean',
     ];
 
@@ -33,6 +35,11 @@ class Chat extends Model
     public function subject(): BelongsTo
     {
         return $this->belongsTo(Subject::class);
+    }
+
+    public function section(): BelongsTo
+    {
+        return $this->belongsTo(SubjectSection::class, 'section_id');
     }
 
     public function studySpace(): BelongsTo

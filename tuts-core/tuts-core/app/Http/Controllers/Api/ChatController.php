@@ -576,6 +576,7 @@ class ChatController extends Controller
     {
         $validated = $request->validate([
             'subject_id' => 'nullable|exists:subjects,id',
+            'section_id' => 'nullable|integer|exists:subject_sections,id',
             'space_id' => 'nullable|exists:study_spaces,id',
             'folder_id' => 'nullable|exists:space_folders,id',
             'context_type' => 'nullable|string|in:uc,space,temporary',
@@ -585,8 +586,11 @@ class ChatController extends Controller
         $userId = $this->requireAuthenticatedUserId();
         $contextType = $validated['context_type'] ?? 'uc';
         $subjectId = $validated['subject_id'] ?? null;
+        $sectionId = $validated['section_id'] ?? null;
         $spaceId = $validated['space_id'] ?? null;
         $folderId = $validated['folder_id'] ?? null;
+        $subject = null;
+        $section = null;
 
         if ($contextType === 'uc' && !$subjectId) {
             abort(422, 'Tens de escolher uma UC para criar uma conversa de UC.');
@@ -599,6 +603,14 @@ class ChatController extends Controller
         if ($subjectId) {
             $subject = Subject::findOrFail($subjectId);
             abort_unless($this->userCanAccessSubject($subject), 403, 'Acesso negado à UC escolhida.');
+        }
+
+        if ($contextType === 'uc') {
+            $section = $this->resolveSection($subject, $sectionId ? (int) $sectionId : null);
+        } elseif ($sectionId) {
+            throw ValidationException::withMessages([
+                'section_id' => 'A secção só pode ser usada em conversas de UC.',
+            ]);
         }
 
         if ($spaceId) {
@@ -619,6 +631,7 @@ class ChatController extends Controller
         $chat = Chat::create([
             'user_id' => $userId,
             'subject_id' => $contextType === 'uc' ? $subjectId : null,
+            'section_id' => $contextType === 'uc' ? $section?->id : null,
             'study_space_id' => $contextType === 'space' ? $spaceId : null,
             'space_folder_id' => $contextType === 'space' ? $folderId : null,
             'context_type' => $contextType,
@@ -693,14 +706,6 @@ class ChatController extends Controller
             ]);
         }
 
-        $attachedMaterialRefs = $this->resolveAttachedMaterialRefs(
-            $this->parseAttachedMaterialRefs($request),
-            $subject,
-            $section,
-            $space,
-            $userId
-        );
-
         if ($request->filled('chat_id')) {
             $chat = Chat::where('id', (int) $request->chat_id)
                 ->where('user_id', $userId)
@@ -708,6 +713,16 @@ class ChatController extends Controller
 
             if ($contextType === 'uc' && $subject && (int) $chat->subject_id !== (int) $subject->id) {
                 abort(422, 'O chat indicado não pertence à Unidade Curricular atual.');
+            }
+
+            if ($contextType === 'uc') {
+                if ($request->filled('section_id') && (int) $chat->section_id !== (int) $request->input('section_id')) {
+                    abort(422, 'O chat indicado não pertence à secção indicada.');
+                }
+
+                $section = $chat->section_id
+                    ? $this->resolveSection($subject, (int) $chat->section_id)
+                    : null;
             }
 
             if ($contextType === 'space' && $space && (int) $chat->study_space_id !== (int) $space->id) {
@@ -724,6 +739,7 @@ class ChatController extends Controller
             $chat = Chat::create([
                 'user_id' => $userId,
                 'subject_id' => $subject?->id,
+                'section_id' => $section?->id,
                 'study_space_id' => $space?->id,
                 'space_folder_id' => $folder?->id,
                 'context_type' => $contextType,
@@ -731,6 +747,14 @@ class ChatController extends Controller
                 'title' => $titulo,
             ]);
         }
+
+        $attachedMaterialRefs = $this->resolveAttachedMaterialRefs(
+            $this->parseAttachedMaterialRefs($request),
+            $subject,
+            $section,
+            $space,
+            $userId
+        );
 
         $chatId = (int) $chat->id;
         $threadId = (string) $chatId;
@@ -1128,6 +1152,7 @@ class ChatController extends Controller
             'titulo' => $chat->title,
             'context_type' => $chat->context_type ?? 'uc',
             'subject_id' => $chat->subject_id,
+            'section_id' => $chat->section_id,
             'subject_name' => $chat->subject?->name,
             'space_id' => $chat->study_space_id,
             'study_space_id' => $chat->study_space_id,
@@ -1174,6 +1199,7 @@ class ChatController extends Controller
             'title' => $chat->title,
             'context_type' => $chat->context_type ?? 'uc',
             'subject_id' => $chat->subject_id,
+            'section_id' => $chat->section_id,
             'subject_name' => $chat->subject?->name,
             'study_space_id' => $chat->study_space_id,
             'space_id' => $chat->study_space_id,
@@ -1198,6 +1224,7 @@ class ChatController extends Controller
             'title' => $chat->title,
             'context_type' => $chat->context_type ?? 'uc',
             'subject_id' => $chat->subject_id,
+            'section_id' => $chat->section_id,
             'subject_name' => $chat->subject?->name,
             'study_space_id' => $chat->study_space_id,
             'space_id' => $chat->study_space_id,
