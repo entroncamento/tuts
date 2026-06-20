@@ -174,7 +174,13 @@ class SubjectController extends Controller
         ]);
 
         try {
-            $resolvedSubject->delete();
+            DB::transaction(function () use ($resolvedSubject) {
+                $resolvedSubject->forceFill([
+                    'status' => 'archived',
+                ])->save();
+
+                $resolvedSubject->delete();
+            });
         } catch (\Throwable $exception) {
             Log::warning('[TUTS][Subjects] delete failed', [
                 'user_id' => $user->id,
