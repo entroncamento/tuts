@@ -83,6 +83,9 @@ class StudyPlanService
         $message = $payload['detail'] ?? $payload['message'] ?? null;
 
         if (is_array($message)) {
+            if (isset($message['warnings']) && is_array($message['warnings'])) {
+                return implode(' ', $message['warnings']);
+            }
             $message = $message['message'] ?? $message['msg'] ?? $message['detail'] ?? null;
         }
 

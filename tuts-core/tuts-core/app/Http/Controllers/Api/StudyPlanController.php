@@ -84,14 +84,44 @@ class StudyPlanController extends Controller
                 ],
             ], Response::HTTP_CREATED);
         } catch (\Exception $e) {
-            $status = in_array($e->getCode(), [502, 503], true)
-                ? $e->getCode()
-                : Response::HTTP_BAD_GATEWAY;
+            Log::error('Erro ao gerar plano de estudo', [
+                'user_id' => optional($request->user())->id,
+                'subject_id' => $request->input('subject_id'),
+                'material_ids' => $request->input('material_ids'),
+                'context' => $request->input('context'),
+                'exception' => get_class($e),
+                'message' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            $statusCode = Response::HTTP_INTERNAL_SERVER_ERROR;
+            $details = 'Ocorreu um erro no processamento do plano. A equipa técnica foi notificada.';
+
+            if ($e instanceof \RuntimeException && $e->getCode() >= 400 && $e->getCode() < 600) {
+                $statusCode = $e->getCode();
+                $body = json_decode($e->getMessage(), true);
+
+                if (is_array($body) && isset($body['detail'])) {
+                    if (is_array($body['detail']) && isset($body['detail']['warnings'])) {
+                        $details = implode(' ', $body['detail']['warnings']);
+                    } elseif (is_string($body['detail'])) {
+                        $details = $body['detail'];
+                    } else {
+                        $details = json_encode($body['detail'], JSON_UNESCAPED_UNICODE);
+                    }
+                } else {
+                    $details = $e->getMessage();
+                }
+            } elseif (str_contains($e->getMessage(), 'Connection timed out') || str_contains($e->getMessage(), 'cURL error')) {
+                $statusCode = Response::HTTP_BAD_GATEWAY;
+                $details = 'O serviço RAG está temporariamente indisponível. Por favor, tente novamente mais tarde.';
+            }
 
             return response()->json([
                 'status' => 'erro',
-                'message' => $e->getMessage() ?: 'Serviço de planos de estudo indisponível.',
-            ], $status);
+                'message' => 'Erro ao gerar plano de estudo.',
+                'details' => $details,
+            ], $statusCode);
         }
     }
 
