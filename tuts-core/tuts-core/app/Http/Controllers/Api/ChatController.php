@@ -449,23 +449,15 @@ class ChatController extends Controller
         ];
     }
 
-    private function preparePersonalFilesForRag(array $effectiveMaterialRefs, array $currentMaterialRefs, int $userId, int $chatId, int $messageId): array
+    private function preparePersonalFilesForRag(array $attachedMaterialRefs, int $userId, int $chatId, int $messageId): array
     {
-        $personalRefs = collect($effectiveMaterialRefs)
+        $personalRefs = collect($attachedMaterialRefs)
             ->where('source', 'personal')
             ->values();
 
         if ($personalRefs->isEmpty()) {
             return [[], [], []];
         }
-
-        $currentPersonalKeys = collect($currentMaterialRefs)
-            ->where('source', 'personal')
-            ->map(fn ($ref) => 'personal:' . (int) ($ref['material_id'] ?? 0))
-            ->filter(fn ($key) => $key !== 'personal:0')
-            ->values()
-            ->all();
-        $currentPersonalKeySet = array_flip($currentPersonalKeys);
 
         Log::info('[TUTS][Chat][Personal Attachments] resolving personal refs', [
             'user_id' => $userId,
@@ -520,13 +512,6 @@ class ChatController extends Controller
                 'size_bytes' => $sizeBytes,
                 'temporary' => true,
             ];
-
-            $isCurrentRef = isset($currentPersonalKeySet['personal:' . (int) $material->id]);
-            if (!$isCurrentRef) {
-                $safeMeta['status'] = 'indexed';
-                $metadata[] = $safeMeta;
-                continue;
-            }
 
             Log::info('[TUTS][Chat][Personal Attachments] personal file authorized', [
                 'user_id' => $userId,
@@ -628,12 +613,6 @@ class ChatController extends Controller
             'requested_count' => $personalRefs->count(),
             'attached_count' => count($files),
             'total_bytes' => $totalBytes,
-        ]);
-
-        Log::info('[TUTS][ChatMaterials] personal current refs sent with files', [
-            'chat_id' => $chatId,
-            'current_personal' => count($files),
-            'previous_personal_ids' => max(0, $personalRefs->count() - count($files)),
         ]);
 
         return [$files, $metadata, $tempPaths];
@@ -1102,7 +1081,6 @@ class ChatController extends Controller
                 'message_id' => $userMessageId,
                 'subject_id' => $subject?->id,
                 'section_id' => $section?->id,
-                'user_id' => $userId,
                 'attached_material_refs' => json_encode($effectiveMaterialRefs, JSON_UNESCAPED_UNICODE),
                 'personal_material_ids' => json_encode($personalMaterialIds, JSON_UNESCAPED_UNICODE),
                 'subject_material_ids' => json_encode($subjectMaterialIds, JSON_UNESCAPED_UNICODE),
@@ -1119,7 +1097,6 @@ class ChatController extends Controller
 
             [$personalFiles, $personalFileRefs, $personalTempPaths] = $this->preparePersonalFilesForRag(
                 $effectiveMaterialRefs,
-                $attachedMaterialRefs,
                 $userId,
                 $chatId,
                 $userMessageId
