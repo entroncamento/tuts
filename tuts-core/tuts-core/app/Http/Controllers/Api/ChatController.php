@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Chat;
 use App\Models\Message;
+use App\Models\MessageMaterialRef;
 use App\Models\PersonalMaterial;
 use App\Models\SpaceFolder;
 use App\Models\SpaceMaterial;
@@ -25,6 +26,7 @@ class ChatController extends Controller
 {
     private const MAX_PERSONAL_FILES_PER_MESSAGE = 3;
     private const MAX_PERSONAL_ATTACHMENT_BYTES = 5 * 1024 * 1024;
+    private const MAX_EFFECTIVE_MATERIAL_REFS = 20;
 
     protected $ragService;
 
@@ -308,6 +310,106 @@ class ChatController extends Controller
         }
 
         return $resolved;
+    }
+
+    private function previousChatMaterialRefs(int $chatId): array
+    {
+        return MessageMaterialRef::query()
+            ->whereHas('message', fn ($query) => $query->where('chat_id', $chatId))
+            ->orderBy('id')
+            ->get([
+                'source',
+                'material_id',
+                'subject_id',
+                'section_id',
+            ])
+            ->map(fn (MessageMaterialRef $ref) => [
+                'source' => $ref->source,
+                'id' => (int) $ref->material_id,
+                'material_id' => (int) $ref->material_id,
+                'subject_id' => $ref->subject_id ? (int) $ref->subject_id : null,
+                'section_id' => $ref->section_id ? (int) $ref->section_id : null,
+            ])
+            ->values()
+            ->all();
+    }
+
+    private function effectiveMaterialRefInputs(array $previousRefs, array $currentRefs, int $chatId): array
+    {
+        $merged = [];
+
+        foreach ($currentRefs as $ref) {
+            $source = (string) ($ref['source'] ?? '');
+            $materialId = (int) ($ref['material_id'] ?? $ref['id'] ?? 0);
+
+            if ($source === '' || $materialId < 1) {
+                continue;
+            }
+
+            $merged["{$source}:{$materialId}"] = $ref + [
+                'source' => $source,
+                'id' => $materialId,
+                'material_id' => $materialId,
+            ];
+        }
+
+        foreach ($previousRefs as $ref) {
+            $source = (string) ($ref['source'] ?? '');
+            $materialId = (int) ($ref['material_id'] ?? $ref['id'] ?? 0);
+
+            if ($source === '' || $materialId < 1) {
+                continue;
+            }
+
+            $key = "{$source}:{$materialId}";
+            if (isset($merged[$key])) {
+                continue;
+            }
+
+            $merged[$key] = $ref + [
+                'source' => $source,
+                'id' => $materialId,
+                'material_id' => $materialId,
+            ];
+        }
+
+        $refs = array_values($merged);
+        if (count($refs) > self::MAX_EFFECTIVE_MATERIAL_REFS) {
+            Log::warning('[TUTS][ChatMaterials] effective refs capped', [
+                'chat_id' => $chatId,
+                'allowed' => self::MAX_EFFECTIVE_MATERIAL_REFS,
+                'skipped' => count($refs) - self::MAX_EFFECTIVE_MATERIAL_REFS,
+            ]);
+
+            $refs = array_slice($refs, 0, self::MAX_EFFECTIVE_MATERIAL_REFS);
+        }
+
+        $personalAllowed = 0;
+        $personalSkipped = 0;
+        $capped = [];
+
+        foreach ($refs as $ref) {
+            if (($ref['source'] ?? '') === 'personal') {
+                if ($personalAllowed >= self::MAX_PERSONAL_FILES_PER_MESSAGE) {
+                    $personalSkipped++;
+                    continue;
+                }
+
+                $personalAllowed++;
+            }
+
+            $capped[] = $ref;
+        }
+
+        if ($personalSkipped > 0) {
+            Log::warning('[TUTS][ChatMaterials] personal persistent refs capped', [
+                'chat_id' => $chatId,
+                'allowed' => self::MAX_PERSONAL_FILES_PER_MESSAGE,
+                'skipped' => $personalSkipped,
+            ]);
+        }
+
+        return $capped;
     }
 
     private function buildUcMaterialScope(?Subject $subject, ?SubjectSection $section): array
@@ -785,8 +887,9 @@ class ChatController extends Controller
             ]);
         }
 
+        $currentAttachedMaterialRefInputs = $this->parseAttachedMaterialRefs($request);
         $attachedMaterialRefs = $this->resolveAttachedMaterialRefs(
-            $this->parseAttachedMaterialRefs($request),
+            $currentAttachedMaterialRefInputs,
             $subject,
             $section,
             $space,
@@ -796,6 +899,26 @@ class ChatController extends Controller
         $chatId = (int) $chat->id;
         $threadId = (string) $chatId;
         $historico = $this->buildHistorico($chatId);
+        $previousMaterialRefInputs = $this->previousChatMaterialRefs($chatId);
+        $effectiveMaterialRefInputs = $this->effectiveMaterialRefInputs(
+            $previousMaterialRefInputs,
+            $currentAttachedMaterialRefInputs,
+            $chatId
+        );
+        $effectiveMaterialRefs = $this->resolveAttachedMaterialRefs(
+            $effectiveMaterialRefInputs,
+            $subject,
+            $section,
+            $space,
+            $userId
+        );
+
+        Log::info('[TUTS][ChatMaterials] effective refs built', [
+            'chat_id' => $chatId,
+            'previous_count' => count($previousMaterialRefInputs),
+            'current_count' => count($attachedMaterialRefs),
+            'effective_count' => count($effectiveMaterialRefs),
+        ]);
 
         if (!$this->ragService->isAvailable()) {
             abort(503, 'O serviço de IA está temporariamente indisponível (Circuit Breaker).');
@@ -889,9 +1012,9 @@ class ChatController extends Controller
         });
 
         $userMessageId = (int) $userMessage->id;
-        $personalMaterialIds = collect($attachedMaterialRefs)->where('source', 'personal')->pluck('material_id')->values()->all();
-        $subjectMaterialIds = collect($attachedMaterialRefs)->where('source', 'subject')->pluck('material_id')->values()->all();
-        $spaceMaterialIds = collect($attachedMaterialRefs)->where('source', 'space')->pluck('material_id')->values()->all();
+        $personalMaterialIds = collect($effectiveMaterialRefs)->where('source', 'personal')->pluck('material_id')->values()->all();
+        $subjectMaterialIds = collect($effectiveMaterialRefs)->where('source', 'subject')->pluck('material_id')->values()->all();
+        $spaceMaterialIds = collect($effectiveMaterialRefs)->where('source', 'space')->pluck('material_id')->values()->all();
         [$scopeSubjectMaterialIds, $scopeMaterials] = $contextType === 'uc'
             ? $this->buildUcMaterialScope($subject, $section)
             : [[], []];
@@ -920,7 +1043,7 @@ class ChatController extends Controller
             $contextType,
             $subject,
             $section,
-            $attachedMaterialRefs,
+            $effectiveMaterialRefs,
             $personalMaterialIds,
             $subjectMaterialIds,
             $spaceMaterialIds,
@@ -958,7 +1081,7 @@ class ChatController extends Controller
                 'message_id' => $userMessageId,
                 'subject_id' => $subject?->id,
                 'section_id' => $section?->id,
-                'attached_material_refs' => json_encode($attachedMaterialRefs, JSON_UNESCAPED_UNICODE),
+                'attached_material_refs' => json_encode($effectiveMaterialRefs, JSON_UNESCAPED_UNICODE),
                 'personal_material_ids' => json_encode($personalMaterialIds, JSON_UNESCAPED_UNICODE),
                 'subject_material_ids' => json_encode($subjectMaterialIds, JSON_UNESCAPED_UNICODE),
                 'space_material_ids' => json_encode($spaceMaterialIds, JSON_UNESCAPED_UNICODE),
@@ -973,7 +1096,7 @@ class ChatController extends Controller
             }
 
             [$personalFiles, $personalFileRefs, $personalTempPaths] = $this->preparePersonalFilesForRag(
-                $attachedMaterialRefs,
+                $effectiveMaterialRefs,
                 $userId,
                 $chatId,
                 $userMessageId
@@ -994,7 +1117,7 @@ class ChatController extends Controller
                 'context_type' => $contextType,
                 'subject_id' => $subject?->id,
                 'section_id' => $section?->id,
-                'attached_refs_count' => count($attachedMaterialRefs),
+                'attached_refs_count' => count($effectiveMaterialRefs),
                 'personal_ids_count' => count($personalMaterialIds),
                 'subject_ids_count' => count($subjectMaterialIds),
                 'space_ids_count' => count($spaceMaterialIds),
