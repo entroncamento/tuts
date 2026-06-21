@@ -31,6 +31,7 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     // Proteção de Autorização (Gate/Policy): Apenas quem tem a permissão 'view-dashboard'
     Route::middleware('can:view-dashboard')->group(function () {
         Route::get('/dashboard/metrics', [DashboardController::class, 'getMetrics']);
+        Route::get('/teacher/dashboard/insights', [\App\Http\Controllers\Api\TeacherDashboardController::class, 'insights']);
     });
 });
 

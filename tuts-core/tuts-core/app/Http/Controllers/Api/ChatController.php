@@ -889,6 +889,13 @@ class ChatController extends Controller
         });
 
         $userMessageId = (int) $userMessage->id;
+
+        try {
+            \App\Jobs\AnalyzeStudentMessageForTeacherInsights::dispatch($userMessageId);
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::warning("[ChatController] Failed to dispatch analysis job: " . $e->getMessage());
+        }
+
         $personalMaterialIds = collect($attachedMaterialRefs)->where('source', 'personal')->pluck('material_id')->values()->all();
         $subjectMaterialIds = collect($attachedMaterialRefs)->where('source', 'subject')->pluck('material_id')->values()->all();
         $spaceMaterialIds = collect($attachedMaterialRefs)->where('source', 'space')->pluck('material_id')->values()->all();

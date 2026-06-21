@@ -25,4 +25,9 @@ class Message extends Model
     {
         return $this->hasMany(MessageMaterialRef::class);
     }
+
+    public function analysis()
+    {
+        return $this->hasOne(StudentMessageAnalysis::class);
+    }
 }
