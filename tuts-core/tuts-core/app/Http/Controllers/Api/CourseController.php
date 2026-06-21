@@ -110,6 +110,7 @@ class CourseController extends Controller
         $acronym = $subject->acronym ?: $this->shortCode($subject->name);
         $code = $subject->enrollment_code ?: $this->fallbackEnrollmentCode($subject);
         $membershipRole = $this->membershipRoleFor($subject);
+        $enrolledStudentsCount = (int) ($subject->students_count ?? 0);
 
         return [
             'id' => 'uc-' . $subject->id,
@@ -133,7 +134,8 @@ class CourseController extends Controller
             'created_by' => $subject->created_by,
             'membership_role' => $membershipRole,
             'is_teacher' => $membershipRole === 'teacher',
-            'students_count' => $subject->students_count ?? 0,
+            'enrolled_students_count' => $enrolledStudentsCount,
+            'students_count' => $enrolledStudentsCount,
             'sections_count' => $subject->sections_count ?? 0,
             'materials_count' => $subject->materials_count ?? 0,
             'color' => $subject->color,
