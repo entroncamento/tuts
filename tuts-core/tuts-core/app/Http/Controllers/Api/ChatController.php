@@ -310,6 +310,43 @@ class ChatController extends Controller
         return $resolved;
     }
 
+    private function buildUcMaterialScope(?Subject $subject, ?SubjectSection $section): array
+    {
+        if (!$subject) {
+            return [[], []];
+        }
+
+        $query = SubjectMaterial::query()
+            ->where('subject_id', $subject->id)
+            ->where('source', 'official')
+            ->orderBy('id');
+
+        if ($section) {
+            $query->where(function ($q) use ($section) {
+                $q->where('section_id', $section->id)
+                    ->orWhereNull('section_id');
+            });
+        }
+
+        $materials = $query->get(['id', 'name', 'section_id', 'source']);
+
+        $scopeMaterials = $materials
+            ->map(fn (SubjectMaterial $material) => [
+                'id' => (int) $material->id,
+                'title' => (string) $material->name,
+                'filename' => (string) $material->name,
+                'section_id' => $material->section_id ? (int) $material->section_id : null,
+                'source' => (string) $material->source,
+            ])
+            ->values()
+            ->all();
+
+        return [
+            $materials->pluck('id')->map(fn ($id) => (int) $id)->values()->all(),
+            $scopeMaterials,
+        ];
+    }
+
     private function preparePersonalFilesForRag(array $attachedMaterialRefs, int $userId, int $chatId, int $messageId): array
     {
         $personalRefs = collect($attachedMaterialRefs)
@@ -855,6 +892,16 @@ class ChatController extends Controller
         $personalMaterialIds = collect($attachedMaterialRefs)->where('source', 'personal')->pluck('material_id')->values()->all();
         $subjectMaterialIds = collect($attachedMaterialRefs)->where('source', 'subject')->pluck('material_id')->values()->all();
         $spaceMaterialIds = collect($attachedMaterialRefs)->where('source', 'space')->pluck('material_id')->values()->all();
+        [$scopeSubjectMaterialIds, $scopeMaterials] = $contextType === 'uc'
+            ? $this->buildUcMaterialScope($subject, $section)
+            : [[], []];
+
+        Log::info('[TUTS][ChatScope] scope material count resolved', [
+            'context_type' => $contextType,
+            'subject_id' => $subject?->id,
+            'section_id' => $section?->id,
+            'scope_material_count' => count($scopeSubjectMaterialIds),
+        ]);
 
         return response()->stream(function () use (
             $urlPython,
@@ -877,6 +924,8 @@ class ChatController extends Controller
             $personalMaterialIds,
             $subjectMaterialIds,
             $spaceMaterialIds,
+            $scopeSubjectMaterialIds,
+            $scopeMaterials,
             $requestId,
             $userId,
             $adaptabilityPreferences
@@ -913,6 +962,8 @@ class ChatController extends Controller
                 'personal_material_ids' => json_encode($personalMaterialIds, JSON_UNESCAPED_UNICODE),
                 'subject_material_ids' => json_encode($subjectMaterialIds, JSON_UNESCAPED_UNICODE),
                 'space_material_ids' => json_encode($spaceMaterialIds, JSON_UNESCAPED_UNICODE),
+                'scope_subject_material_ids' => json_encode($scopeSubjectMaterialIds, JSON_UNESCAPED_UNICODE),
+                'scope_materials' => json_encode($scopeMaterials, JSON_UNESCAPED_UNICODE),
                 'context_type' => $contextType,
                 'chat_id' => $chatId,
             ];
@@ -947,6 +998,7 @@ class ChatController extends Controller
                 'personal_ids_count' => count($personalMaterialIds),
                 'subject_ids_count' => count($subjectMaterialIds),
                 'space_ids_count' => count($spaceMaterialIds),
+                'scope_material_count' => count($scopeSubjectMaterialIds),
                 'personal_files_count' => count($personalFiles),
             ]);
 
