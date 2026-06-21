@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\InternalMessageController;
+use App\Http\Controllers\Api\StudyPlanController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -11,6 +12,7 @@ use Illuminate\Support\Facades\Route;
 */
 // Usamos auth:sanctum (padrão de APIs no Laravel) e um limite de taxa global
 Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
+    Route::post('/study-plans', [StudyPlanController::class, 'store']);
 
     // Proteção de Autorização (Gate/Policy): Apenas quem tem a permissão 'view-dashboard'
     Route::middleware('can:view-dashboard')->group(function () {
