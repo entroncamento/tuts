@@ -99,19 +99,10 @@ class StudyPlanController extends Controller
 
             if ($e instanceof \RuntimeException && $e->getCode() >= 400 && $e->getCode() < 600) {
                 $statusCode = $e->getCode();
-                $body = json_decode($e->getMessage(), true);
-
-                if (is_array($body) && isset($body['detail'])) {
-                    if (is_array($body['detail']) && isset($body['detail']['warnings'])) {
-                        $details = implode(' ', $body['detail']['warnings']);
-                    } elseif (is_string($body['detail'])) {
-                        $details = $body['detail'];
-                    } else {
-                        $details = json_encode($body['detail'], JSON_UNESCAPED_UNICODE);
-                    }
-                } else {
-                    $details = $e->getMessage();
-                }
+                $decodedMessage = json_decode($e->getMessage(), true);
+                $details = $this->extractStudyPlanErrorMessage($decodedMessage)
+                    ?? $this->extractStudyPlanErrorMessage($e->getMessage())
+                    ?? 'Erro ao gerar plano de estudo.';
             } elseif (str_contains($e->getMessage(), 'Connection timed out') || str_contains($e->getMessage(), 'cURL error')) {
                 $statusCode = Response::HTTP_BAD_GATEWAY;
                 $details = 'O serviço RAG está temporariamente indisponível. Por favor, tente novamente mais tarde.';
@@ -125,6 +116,57 @@ class StudyPlanController extends Controller
         }
     }
 
+
+    private function extractStudyPlanErrorMessage(mixed $payload): ?string
+    {
+        if (is_string($payload)) {
+            $payload = preg_replace('/\s+/u', ' ', trim($payload));
+
+            return $payload !== '' ? mb_substr($payload, 0, 500) : null;
+        }
+
+        if (!is_array($payload)) {
+            return null;
+        }
+
+        foreach (['details', 'detail', 'message', 'error', 'errors'] as $key) {
+            if (!array_key_exists($key, $payload)) {
+                continue;
+            }
+
+            $message = $this->extractStudyPlanErrorMessage($payload[$key]);
+            if ($message !== null) {
+                return $message;
+            }
+        }
+
+        if (isset($payload['warnings']) && is_array($payload['warnings'])) {
+            return $this->joinStudyPlanMessages($payload['warnings']);
+        }
+
+        if (isset($payload['msg'])) {
+            return $this->extractStudyPlanErrorMessage($payload['msg']);
+        }
+
+        if (array_is_list($payload)) {
+            return $this->joinStudyPlanMessages(array_map(
+                fn (mixed $item) => $this->extractStudyPlanErrorMessage($item),
+                $payload,
+            ));
+        }
+
+        return null;
+    }
+
+    private function joinStudyPlanMessages(array $messages): ?string
+    {
+        $text = collect($messages)
+            ->filter(fn (mixed $message) => is_string($message) && trim($message) !== '')
+            ->map(fn (string $message) => preg_replace('/\s+/u', ' ', trim($message)))
+            ->implode(' ');
+
+        return $text !== '' ? mb_substr($text, 0, 500) : null;
+    }
     private function userCanAccessSubject(Subject $subject, $user): bool
     {
         if (!$user) {
