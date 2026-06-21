@@ -55,5 +55,15 @@ class AppServiceProvider extends ServiceProvider
         Gate::define('view-dashboard', function ($user) {
             return $user->role === 'professor';
         });
+
+        Gate::define('manage-personal-cover', function ($user, $subject) {
+            $subjectId = $subject instanceof \App\Models\Subject ? $subject->id : $subject;
+            return \DB::table('subject_user')
+                ->where('subject_id', $subjectId)
+                ->where('user_id', $user->id)
+                ->where('role', 'student')
+                ->where('status', 'active')
+                ->exists();
+        });
     }
 }

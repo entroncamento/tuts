@@ -125,6 +125,8 @@ class CourseController extends Controller
             'type' => $metadata['type'] ?? 'mandatory',
             'electiveGroup' => $metadata['elective_group'] ?? null,
             'cover' => $this->covers[$index % count($this->covers)],
+            'personal_cover' => $this->personalCoverFor($subject),
+            'can_manage_personal_cover' => $this->canManagePersonalCover($subject),
             'shortCode' => $acronym,
             'description' => 'Unidade curricular de ' . $subject->name . '.',
             'acronym' => $acronym,
@@ -153,6 +155,52 @@ class CourseController extends Controller
     private function fallbackEnrollmentCode(Subject $subject): string
     {
         return 'UC' . str_pad((string) $subject->id, 5, '0', STR_PAD_LEFT);
+    }
+
+
+    private function canManagePersonalCover(Subject $subject): bool
+    {
+        $userId = auth()->id();
+
+        if (! $userId) {
+            return false;
+        }
+
+        return \DB::table('subject_user')
+            ->where('subject_id', $subject->id)
+            ->where('user_id', $userId)
+            ->where('role', 'student')
+            ->where('status', 'active')
+            ->exists();
+    }
+
+    private function personalCoverFor(Subject $subject): ?array
+    {
+        if (! $this->canManagePersonalCover($subject)) {
+            return null;
+        }
+
+        $preference = \App\Models\UserSubjectPreference::query()
+            ->where('user_id', auth()->id())
+            ->where('subject_id', $subject->id)
+            ->first();
+
+        if (! $preference || ! $preference->cover_external_id) {
+            return null;
+        }
+
+        return [
+            'provider' => $preference->cover_provider,
+            'external_id' => $preference->cover_external_id,
+            'image_url' => $preference->cover_image_url,
+            'thumbnail_url' => $preference->cover_thumbnail_url,
+            'color' => $preference->cover_color,
+            'blur_hash' => $preference->cover_blur_hash,
+            'alt' => $preference->cover_alt,
+            'photographer_name' => $preference->cover_photographer_name,
+            'photographer_url' => $preference->cover_photographer_url,
+            'source_url' => $preference->cover_source_url,
+        ];
     }
 
     private function teacherLabelFor(Subject $subject, ?string $metadataTeacher): string

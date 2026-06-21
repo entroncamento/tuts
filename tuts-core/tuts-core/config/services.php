@@ -56,4 +56,9 @@ return [
             ?: rtrim((string) preg_replace('#/perguntar/?$#', '', env('PYTHON_API_URL', 'http://127.0.0.1:8001/perguntar')), '/'),
         'internal_token' => env('RAG_SERVICE_INTERNAL_TOKEN') ?: env('PYTHON_INTERNAL_TOKEN'),
     ],
+
+    'unsplash' => [
+        'access_key' => env('UNSPLASH_ACCESS_KEY'),
+        'utm_source' => env('UNSPLASH_UTM_SOURCE', 'tuts'),
+    ],
 ];

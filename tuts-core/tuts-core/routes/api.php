@@ -28,6 +28,11 @@ Route::middleware('metrics')->get('/metrics', function () {
 Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::post('/study-plans', [StudyPlanController::class, 'store']);
 
+    // Personal Cover Routes
+    Route::get('/me/subjects/{subject}/cover/photos', [\App\Http\Controllers\Api\PersonalCoverController::class, 'searchPhotos']);
+    Route::put('/me/subjects/{subject}/cover', [\App\Http\Controllers\Api\PersonalCoverController::class, 'updateCover']);
+    Route::delete('/me/subjects/{subject}/cover', [\App\Http\Controllers\Api\PersonalCoverController::class, 'deleteCover']);
+
     // Proteção de Autorização (Gate/Policy): Apenas quem tem a permissão 'view-dashboard'
     Route::middleware('can:view-dashboard')->group(function () {
         Route::get('/dashboard/metrics', [DashboardController::class, 'getMetrics']);
