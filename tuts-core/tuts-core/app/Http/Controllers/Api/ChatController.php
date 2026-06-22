@@ -539,11 +539,19 @@ class ChatController extends Controller
 
             try {
                 $stream = Storage::disk($material->storage_disk)->readStream($material->storage_key);
-            } catch (\Throwable) {
+            } catch (\Throwable $e) {
+                Log::warning('[TUTS][Chat][Personal Attachments] read stream failed', [
+                    'user_id' => $userId,
+                    'chat_id' => $chatId,
+                    'message_id' => $messageId,
+                    'material_id' => $material->id,
+                    'storage_disk' => $material->storage_disk,
+                    'exception_class' => $e::class,
+                ]);
                 $stream = false;
             }
 
-            if (!is_resource($stream)) {
+            if (! is_resource($stream)) {
                 $metadata[] = $safeMeta + ['status' => 'skipped', 'skip_reason' => 'file_not_readable'];
                 Log::warning('[TUTS][Chat][Personal Attachments] personal file skipped', [
                     'user_id' => $userId,
@@ -578,7 +586,44 @@ class ChatController extends Controller
                 continue;
             }
 
-            stream_copy_to_stream($stream, $out);
+            try {
+                $copiedBytes = stream_copy_to_stream($stream, $out);
+            } catch (\Throwable $e) {
+                Log::warning('[TUTS][Chat][Personal Attachments] stream copy failed', [
+                    'user_id' => $userId,
+                    'chat_id' => $chatId,
+                    'message_id' => $messageId,
+                    'material_id' => $material->id,
+                    'exception_class' => $e::class,
+                ]);
+                @fclose($stream);
+                @fclose($out);
+                if ($tempPath && file_exists($tempPath)) {
+                    @unlink($tempPath);
+                }
+                $metadata[] = $safeMeta + ['status' => 'skipped', 'skip_reason' => 'file_not_readable'];
+
+                continue;
+            }
+
+            if ($copiedBytes === false) {
+                Log::warning('[TUTS][Chat][Personal Attachments] stream copy failed', [
+                    'user_id' => $userId,
+                    'chat_id' => $chatId,
+                    'message_id' => $messageId,
+                    'material_id' => $material->id,
+                    'skip_reason' => 'stream_copy_failed',
+                ]);
+                @fclose($stream);
+                @fclose($out);
+                if ($tempPath && file_exists($tempPath)) {
+                    @unlink($tempPath);
+                }
+                $metadata[] = $safeMeta + ['status' => 'skipped', 'skip_reason' => 'file_not_readable'];
+
+                continue;
+            }
+
             fclose($stream);
             fclose($out);
 
