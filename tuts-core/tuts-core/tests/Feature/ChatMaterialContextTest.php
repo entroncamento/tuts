@@ -662,4 +662,216 @@ class ChatMaterialContextTest extends TestCase
 
         $this->assertEmpty($plan['active_materials']);
     }
+
+    /**
+     * Test controller builds correct payload with retrieval_plan.
+     */
+    public function test_controller_builds_correct_payload_with_retrieval_plan(): void
+    {
+        $user = User::factory()->create();
+        $subject = Subject::create(['name' => 'Math', 'acronym' => 'MATH']);
+        $chat = Chat::create([
+            'user_id' => $user->id,
+            'subject_id' => $subject->id,
+            'context_type' => 'uc',
+            'title' => 'Math Chat',
+        ]);
+        
+        $controller = app(\App\Http\Controllers\Api\ChatController::class);
+        $payload = $controller->buildRagRequestPayload(
+            $chat,
+            'Pergunta',
+            'Math',
+            'default',
+            'thread_123',
+            '[]',
+            1,
+            $subject,
+            null,
+            null,
+            'uc',
+            null,
+            [],
+            [],
+            [],
+            [],
+            [],
+            []
+        );
+
+        $this->assertArrayHasKey('retrieval_plan', $payload);
+        $plan = json_decode($payload['retrieval_plan'], true);
+        $this->assertEquals($chat->id, $plan['chat_id']);
+        $this->assertEquals('subject', $plan['base_context']['type']);
+        $this->assertEquals($subject->id, $plan['base_context']['subject_id']);
+        // legacy fields should be kept
+        $this->assertEquals('Pergunta', $payload['texto']);
+        $this->assertEquals('Math', $payload['uc']);
+        $this->assertEquals($subject->id, $payload['subject_id']);
+    }
+
+    /**
+     * Test controller payload includes section context.
+     */
+    public function test_controller_payload_includes_section_context(): void
+    {
+        $user = User::factory()->create();
+        $subject = Subject::create(['name' => 'Math', 'acronym' => 'MATH']);
+        $sectionId = \Illuminate\Support\Facades\DB::table('subject_sections')->insertGetId([
+            'subject_id' => $subject->id,
+            'name' => 'Section A',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $section = \App\Models\SubjectSection::find($sectionId);
+
+        $chat = Chat::create([
+            'user_id' => $user->id,
+            'subject_id' => $subject->id,
+            'section_id' => $sectionId,
+            'context_type' => 'uc',
+            'title' => 'Section Chat',
+        ]);
+        
+        $controller = app(\App\Http\Controllers\Api\ChatController::class);
+        $payload = $controller->buildRagRequestPayload(
+            $chat,
+            'Pergunta',
+            'Math',
+            'default',
+            'thread_123',
+            '[]',
+            1,
+            $subject,
+            $section,
+            null,
+            'uc',
+            null,
+            [],
+            [],
+            [],
+            [],
+            [],
+            []
+        );
+
+        $this->assertArrayHasKey('retrieval_plan', $payload);
+        $plan = json_decode($payload['retrieval_plan'], true);
+        $this->assertEquals('section', $plan['base_context']['type']);
+        $this->assertEquals($subject->id, $plan['base_context']['subject_id']);
+        $this->assertEquals($sectionId, $plan['base_context']['section_id']);
+    }
+
+    /**
+     * Test controller payload includes active materials.
+     */
+    public function test_controller_payload_includes_active_materials(): void
+    {
+        $user = User::factory()->create();
+        $subject = Subject::create(['name' => 'Math', 'acronym' => 'MATH']);
+        $chat = Chat::create([
+            'user_id' => $user->id,
+            'subject_id' => $subject->id,
+            'context_type' => 'uc',
+            'title' => 'Math Chat',
+        ]);
+
+        $sMaterial = SubjectMaterial::create([
+            'subject_id' => $subject->id,
+            'name' => 'syllabus.pdf',
+            'disk' => 'r2',
+            'path' => 'syllabus.pdf',
+        ]);
+
+        $pMaterial = PersonalMaterial::create([
+            'owner_id' => $user->id,
+            'uploaded_by' => $user->id,
+            'original_name' => 'p_doc.pdf',
+            'storage_disk' => 'r2',
+            'storage_key' => 'keys/p_doc.pdf',
+        ]);
+
+        $this->service->activateSubjectMaterial($chat, $sMaterial);
+        $this->service->activatePersonalMaterial($chat, $pMaterial);
+
+        $controller = app(\App\Http\Controllers\Api\ChatController::class);
+        $payload = $controller->buildRagRequestPayload(
+            $chat,
+            'Pergunta',
+            'Math',
+            'default',
+            'thread_123',
+            '[]',
+            1,
+            $subject,
+            null,
+            null,
+            'uc',
+            null,
+            [],
+            [],
+            [],
+            [],
+            [],
+            []
+        );
+
+        $this->assertArrayHasKey('retrieval_plan', $payload);
+        $plan = json_decode($payload['retrieval_plan'], true);
+        
+        $this->assertCount(2, $plan['active_materials']);
+        $personal = collect($plan['active_materials'])->firstWhere('source', 'personal');
+        $this->assertEquals($pMaterial->id, $personal['personal_material_id']);
+        
+        $subjectMat = collect($plan['active_materials'])->firstWhere('source', 'subject');
+        $this->assertEquals($sMaterial->id, $subjectMat['subject_material_id']);
+    }
+
+    /**
+     * Test controller payload fallback on builder failure.
+     */
+    public function test_controller_payload_builder_failure_fallback_to_legacy(): void
+    {
+        $user = User::factory()->create();
+        $chat = Chat::create([
+            'user_id' => $user->id,
+            'context_type' => 'temporary',
+            'title' => 'Temp Chat',
+        ]);
+
+        // Mock the builder to throw exception
+        $this->mock(ChatRetrievalPlanBuilder::class, function ($mock) use ($chat) {
+            $mock->shouldReceive('buildForChat')
+                ->with($chat)
+                ->andThrow(new \Exception('Builder simulated error'));
+        });
+
+        $controller = app(\App\Http\Controllers\Api\ChatController::class);
+        $payload = $controller->buildRagRequestPayload(
+            $chat,
+            'Pergunta',
+            'UC',
+            'default',
+            'thread_123',
+            '[]',
+            1,
+            null,
+            null,
+            null,
+            'temporary',
+            null,
+            [],
+            [],
+            [],
+            [],
+            [],
+            []
+        );
+
+        // retrieval_plan should not be present
+        $this->assertArrayNotHasKey('retrieval_plan', $payload);
+        // legacy fields should still be present
+        $this->assertEquals('Pergunta', $payload['texto']);
+        $this->assertEquals('UC', $payload['uc']);
+    }
 }

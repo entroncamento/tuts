@@ -14,6 +14,7 @@ use App\Models\SubjectMaterial;
 use App\Models\SubjectSection;
 use App\Services\RagService;
 use App\Services\ChatMaterialContextService;
+use App\Services\ChatRetrievalPlanBuilder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Context;
@@ -665,6 +666,118 @@ class ChatController extends Controller
         return [$files, $metadata, $tempPaths];
     }
 
+    public function buildRetrievalPlanForChat(Chat $chat): ?array
+    {
+        try {
+            $builder = app(ChatRetrievalPlanBuilder::class);
+            return $builder->buildForChat($chat);
+        } catch (\Throwable $e) {
+            Log::warning('[TUTS][ChatRetrievalPlan] Failed to build retrieval plan: ' . $e->getMessage(), [
+                'chat_id' => $chat->id,
+                'exception' => $e,
+            ]);
+            return null;
+        }
+    }
+
+    public function buildRagRequestPayload(
+        Chat $chat,
+        string $texto,
+        string $uc,
+        string $preferencia,
+        string $threadId,
+        string $historico,
+        int $userMessageId,
+        $subject,
+        $section,
+        $space,
+        string $contextType,
+        ?string $adaptabilityPreferences,
+        array $attachedMaterialRefs,
+        array $personalMaterialIds,
+        array $subjectMaterialIds,
+        array $spaceMaterialIds,
+        array $scopeSubjectMaterialIds,
+        array $scopeMaterials
+    ): array {
+        $postFields = [
+            'texto' => $texto,
+            'uc' => $uc,
+            'preferencia' => $preferencia,
+            'thread_id' => $threadId,
+            'historico' => $historico,
+            'message_id' => $userMessageId,
+            'subject_id' => $subject?->id,
+            'section_id' => $section?->id,
+            'attached_material_refs' => json_encode($attachedMaterialRefs, JSON_UNESCAPED_UNICODE),
+            'personal_material_ids' => json_encode($personalMaterialIds, JSON_UNESCAPED_UNICODE),
+            'subject_material_ids' => json_encode($subjectMaterialIds, JSON_UNESCAPED_UNICODE),
+            'space_material_ids' => json_encode($spaceMaterialIds, JSON_UNESCAPED_UNICODE),
+            'scope_subject_material_ids' => json_encode($scopeSubjectMaterialIds, JSON_UNESCAPED_UNICODE),
+            'scope_materials' => json_encode($scopeMaterials, JSON_UNESCAPED_UNICODE),
+            'context_type' => $contextType,
+            'chat_id' => (int) $chat->id,
+        ];
+
+        if ($adaptabilityPreferences !== null) {
+            $postFields['adaptability_preferences'] = $adaptabilityPreferences;
+        }
+
+        // Build and inject retrieval plan
+        $retrievalPlan = $this->buildRetrievalPlanForChat($chat);
+        if ($retrievalPlan !== null) {
+            $postFields['retrieval_plan'] = json_encode($retrievalPlan, JSON_UNESCAPED_UNICODE);
+            
+            // Logging as required by requirement 6
+            $personalCount = 0;
+            $subjectCount = 0;
+            $activeCount = count($retrievalPlan['active_materials'] ?? []);
+            foreach (($retrievalPlan['active_materials'] ?? []) as $mat) {
+                if (($mat['source'] ?? '') === 'personal') {
+                    $personalCount++;
+                } elseif (($mat['source'] ?? '') === 'subject') {
+                    $subjectCount++;
+                }
+            }
+            $baseCtx = $retrievalPlan['base_context'] ?? [];
+            Log::info('[TUTS][ChatRetrievalPlan] Outgoing payload details', [
+                'chat_id' => (int) $chat->id,
+                'user_id' => (int) $chat->user_id,
+                'context_type' => $contextType,
+                'base_context_type' => $baseCtx['type'] ?? null,
+                'base_context_ids' => [
+                    'subject_id' => $baseCtx['subject_id'] ?? null,
+                    'section_id' => $baseCtx['section_id'] ?? null,
+                    'space_id' => $baseCtx['space_id'] ?? null,
+                ],
+                'active_materials_count' => $activeCount,
+                'source_counts' => [
+                    'personal' => $personalCount,
+                    'subject' => $subjectCount,
+                ],
+                'sent' => true,
+                'fallback_reason' => null,
+            ]);
+        } else {
+            Log::info('[TUTS][ChatRetrievalPlan] Outgoing payload details', [
+                'chat_id' => (int) $chat->id,
+                'user_id' => (int) $chat->user_id,
+                'context_type' => $contextType,
+                'base_context_type' => null,
+                'base_context_ids' => [],
+                'active_materials_count' => 0,
+                'source_counts' => [
+                    'personal' => 0,
+                    'subject' => 0,
+                ],
+                'sent' => false,
+                'fallback_reason' => 'Failed to build plan or exception caught',
+            ]);
+        }
+
+        return $postFields;
+    }
+
     private function formatMaterialRef($ref): array
     {
         return [
@@ -1286,28 +1399,26 @@ class ChatController extends Controller
             @ob_flush();
             flush();
 
-            $postFields = [
-                'texto' => $texto,
-                'uc' => $uc,
-                'preferencia' => $preferencia,
-                'thread_id' => $threadId,
-                'historico' => $historico,
-                'message_id' => $userMessageId,
-                'subject_id' => $subject?->id,
-                'section_id' => $section?->id,
-                'attached_material_refs' => json_encode($attachedMaterialRefs, JSON_UNESCAPED_UNICODE),
-                'personal_material_ids' => json_encode($personalMaterialIds, JSON_UNESCAPED_UNICODE),
-                'subject_material_ids' => json_encode($subjectMaterialIds, JSON_UNESCAPED_UNICODE),
-                'space_material_ids' => json_encode($spaceMaterialIds, JSON_UNESCAPED_UNICODE),
-                'scope_subject_material_ids' => json_encode($scopeSubjectMaterialIds, JSON_UNESCAPED_UNICODE),
-                'scope_materials' => json_encode($scopeMaterials, JSON_UNESCAPED_UNICODE),
-                'context_type' => $contextType,
-                'chat_id' => $chatId,
-            ];
-
-            if ($adaptabilityPreferences !== null) {
-                $postFields['adaptability_preferences'] = $adaptabilityPreferences;
-            }
+            $postFields = $this->buildRagRequestPayload(
+                $chat,
+                $texto,
+                $uc,
+                $preferencia,
+                $threadId,
+                $historico,
+                $userMessageId,
+                $subject,
+                $section,
+                $space,
+                $contextType,
+                $adaptabilityPreferences,
+                $attachedMaterialRefs,
+                $personalMaterialIds,
+                $subjectMaterialIds,
+                $spaceMaterialIds,
+                $scopeSubjectMaterialIds,
+                $scopeMaterials
+            );
 
             [$personalFiles, $personalFileRefs, $personalTempPaths] = $this->preparePersonalFilesForRag(
                 $attachedMaterialRefs,
