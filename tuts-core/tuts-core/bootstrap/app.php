@@ -41,6 +41,11 @@ return Application::configure(basePath: dirname(__DIR__))
         // injetar headers como X-Frame-Options, Strict-Transport-Security, etc.
         $middleware->append(\App\Http\Middleware\SecurityHeaders::class);
 
+        $middleware->validateCsrfTokens(except: [
+            'api/register',
+            'api/logout',
+        ]);
+
         $middleware->statefulApi();
     })
     ->withExceptions(function (Exceptions $exceptions) {
