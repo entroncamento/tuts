@@ -59,6 +59,23 @@ class ChatController extends Controller
         return (int) $userId;
     }
 
+    private function temporaryRetentionAttributes(): array
+    {
+        return [
+            'retention_days' => Chat::DEFAULT_TEMPORARY_RETENTION_DAYS,
+            'expires_at' => now()->addDays(Chat::DEFAULT_TEMPORARY_RETENTION_DAYS),
+        ];
+    }
+
+    private function expiredTemporaryChatResponse(int $chatId)
+    {
+        return response()->json([
+            'status' => 'expired',
+            'message' => 'Esta conversa temporária expirou.',
+            'chat_id' => $chatId,
+        ], 410);
+    }
+
     private function userCanAccessSubject(Subject $subject): bool
     {
         $user = Auth::user();
@@ -665,7 +682,7 @@ class ChatController extends Controller
                 ->firstOrFail();
         }
 
-        $chat = Chat::create([
+        $chatAttributes = [
             'user_id' => $userId,
             'subject_id' => $contextType === 'uc' ? $subjectId : null,
             'section_id' => $contextType === 'uc' ? $section?->id : null,
@@ -674,7 +691,13 @@ class ChatController extends Controller
             'context_type' => $contextType,
             'is_temporary' => $contextType === 'temporary',
             'title' => $validated['title'] ?? 'Nova Conversa com o TUT\'S',
-        ]);
+        ];
+
+        if ($contextType === 'temporary') {
+            $chatAttributes = array_merge($chatAttributes, $this->temporaryRetentionAttributes());
+        }
+
+        $chat = Chat::create($chatAttributes);
 
         return response()->json([
             'status' => 'sucesso',
@@ -748,6 +771,29 @@ class ChatController extends Controller
                 ->where('user_id', $userId)
                 ->firstOrFail();
 
+            $storedContextType = $chat->context_type ?: 'uc';
+
+            if ($storedContextType !== $contextType) {
+                abort(422, 'O chat indicado não pertence ao contexto atual.');
+            }
+
+            if ($chat->isExpired()) {
+                return response()->stream(function () use ($chat) {
+                    echo 'data: ' . json_encode([
+                        'error' => 'temporary_chat_expired',
+                        'message' => 'Esta conversa temporária expirou.',
+                        'chat_id' => (int) $chat->id,
+                    ], JSON_UNESCAPED_UNICODE) . "\n\n";
+                    echo "data: [DONE]\n\n";
+                    @ob_flush();
+                    flush();
+                }, 410, [
+                    'Content-Type' => 'text/event-stream',
+                    'Cache-Control' => 'no-cache',
+                    'X-Accel-Buffering' => 'no',
+                ]);
+            }
+
             if ($contextType === 'uc' && $subject && (int) $chat->subject_id !== (int) $subject->id) {
                 abort(422, 'O chat indicado não pertence à Unidade Curricular atual.');
             }
@@ -773,7 +819,7 @@ class ChatController extends Controller
             $tituloBase = trim((string) $request->texto);
             $titulo = $tituloBase !== '' ? mb_substr($tituloBase, 0, 80) : 'Chat TUT\'S';
 
-            $chat = Chat::create([
+            $chatAttributes = [
                 'user_id' => $userId,
                 'subject_id' => $subject?->id,
                 'section_id' => $section?->id,
@@ -782,7 +828,13 @@ class ChatController extends Controller
                 'context_type' => $contextType,
                 'is_temporary' => $contextType === 'temporary',
                 'title' => $titulo,
-            ]);
+            ];
+
+            if ($contextType === 'temporary') {
+                $chatAttributes = array_merge($chatAttributes, $this->temporaryRetentionAttributes());
+            }
+
+            $chat = Chat::create($chatAttributes);
         }
 
         $attachedMaterialRefs = $this->resolveAttachedMaterialRefs(
@@ -1198,6 +1250,10 @@ class ChatController extends Controller
             ->where('user_id', $userId)
             ->firstOrFail();
 
+        if ($chat->isExpired()) {
+            return $this->expiredTemporaryChatResponse((int) $chat->id);
+        }
+
         $mensagens = Message::with('materialRefs')
             ->where('chat_id', $chat->id)
             ->orderBy('created_at', 'asc')
@@ -1219,6 +1275,9 @@ class ChatController extends Controller
             'folder_id' => $chat->space_folder_id,
             'space_folder_id' => $chat->space_folder_id,
             'folder_name' => $chat->spaceFolder?->name,
+            'is_temporary' => (bool) $chat->is_temporary,
+            'retention_days' => $chat->isTemporary() ? $chat->retention_days : null,
+            'expires_at' => $chat->isTemporary() ? $chat->expires_at?->toISOString() : null,
             'mensagens' => $mensagens,
         ]);
     }
@@ -1231,6 +1290,7 @@ class ChatController extends Controller
         $chats = Chat::with(['subject', 'studySpace', 'spaceFolder'])
             ->with(['messages' => fn ($query) => $query->latest()->limit(1)])
             ->where('user_id', $userId)
+            ->notExpired()
             ->orderBy('updated_at', 'desc')
             ->get()
             ->map(fn (Chat $chat) => $this->formatChatListItem($chat))
@@ -1267,6 +1327,8 @@ class ChatController extends Controller
             'folder_id' => $chat->space_folder_id,
             'folder_name' => $chat->spaceFolder?->name,
             'is_temporary' => (bool) $chat->is_temporary,
+            'retention_days' => $chat->isTemporary() ? $chat->retention_days : null,
+            'expires_at' => $chat->isTemporary() ? $chat->expires_at?->toISOString() : null,
             'last_message' => $preview,
             'last_message_role' => $lastMessage?->role,
             'created_at' => $chat->created_at?->toISOString(),
@@ -1292,6 +1354,8 @@ class ChatController extends Controller
             'folder_id' => $chat->space_folder_id,
             'folder_name' => $chat->spaceFolder?->name,
             'is_temporary' => (bool) $chat->is_temporary,
+            'retention_days' => $chat->isTemporary() ? $chat->retention_days : null,
+            'expires_at' => $chat->isTemporary() ? $chat->expires_at?->toISOString() : null,
             'created_at' => $chat->created_at?->toISOString(),
             'updated_at' => $chat->updated_at?->toISOString(),
         ];

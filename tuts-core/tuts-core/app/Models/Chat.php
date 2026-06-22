@@ -2,14 +2,21 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Carbon;
+use InvalidArgumentException;
 
 class Chat extends Model
 {
     use HasFactory;
+
+    public const TEMPORARY_RETENTION_DAYS = [7, 15, 30];
+    public const DEFAULT_TEMPORARY_RETENTION_DAYS = 7;
+    public const MAX_TEMPORARY_RETENTION_DAYS = 30;
 
     protected $fillable = [
         'user_id',
@@ -19,13 +26,67 @@ class Chat extends Model
         'space_folder_id',
         'context_type',
         'is_temporary',
+        'retention_days',
+        'expires_at',
         'title',
     ];
 
     protected $casts = [
         'section_id' => 'integer',
         'is_temporary' => 'boolean',
+        'retention_days' => 'integer',
+        'expires_at' => 'datetime',
     ];
+
+    public function isTemporary(): bool
+    {
+        return $this->context_type === 'temporary' || (bool) $this->is_temporary;
+    }
+
+    public function isExpired(): bool
+    {
+        return $this->isTemporary()
+            && $this->expires_at !== null
+            && $this->expires_at->lte(now());
+    }
+
+    public function scopeNotExpired(Builder $query): Builder
+    {
+        return $query->where(function (Builder $query) {
+            $query->where(function (Builder $query) {
+                $query->where(function (Builder $query) {
+                    $query->where('context_type', 'temporary')
+                        ->orWhere('is_temporary', true);
+                })
+                    ->where(function (Builder $query) {
+                        $query->whereNull('expires_at')
+                            ->orWhere('expires_at', '>', now());
+                    });
+            })->orWhere(function (Builder $query) {
+                $query->where(function (Builder $query) {
+                    $query->whereNull('context_type')
+                        ->orWhere('context_type', '!=', 'temporary');
+                })->where(function (Builder $query) {
+                    $query->whereNull('is_temporary')
+                        ->orWhere('is_temporary', false);
+                });
+            });
+        });
+    }
+
+    public function applyTemporaryRetention(int $days, ?Carbon $from = null): self
+    {
+        if (!in_array($days, self::TEMPORARY_RETENTION_DAYS, true)) {
+            throw new InvalidArgumentException('Invalid temporary chat retention days.');
+        }
+
+        $from ??= now();
+
+        $this->retention_days = $days;
+        $this->expires_at = $from->copy()->addDays($days);
+
+        return $this;
+    }
 
     public function user(): BelongsTo
     {
