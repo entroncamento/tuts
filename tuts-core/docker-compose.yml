@@ -23,6 +23,7 @@ services:
     volumes:
       - tuts-storage:/app/storage
       - ./tuts-rag-service/pdfs:/app/storage/app/public/pdfs
+      - ./tuts-core/docker/php/conf.d/uploads.ini:/usr/local/etc/php/conf.d/uploads.ini:ro
     ports:
       - "8000:80"
     healthcheck:

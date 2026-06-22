@@ -19,6 +19,7 @@ class SubjectMaterial extends Model
         'type',
         'mime_type',
         'size_bytes',
+        'disk',
         'path',
         'url',
         'source',

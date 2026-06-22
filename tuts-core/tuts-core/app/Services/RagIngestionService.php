@@ -117,15 +117,38 @@ class RagIngestionService
             return null;
         }
 
-        foreach (['public', 'local'] as $diskName) {
-            $disk = Storage::disk($diskName);
-
-            if ($disk->exists($path)) {
-                $stream = $disk->readStream($path);
-
-                if (is_resource($stream)) {
-                    return [$stream, basename($path), $material->mime_type ?: 'application/pdf'];
+        // Try explicit disk if set (e.g. 'r2')
+        if (!empty($material->disk)) {
+            try {
+                $disk = Storage::disk($material->disk);
+                if ($disk->exists($path)) {
+                    $stream = $disk->readStream($path);
+                    if (is_resource($stream)) {
+                        return [$stream, basename($path), $material->mime_type ?: 'application/pdf'];
+                    }
                 }
+            } catch (\Throwable $e) {
+                Log::warning('[TUTS][RAG Ingestion] failed to read from configured disk', [
+                    'disk' => $material->disk,
+                    'path' => $path,
+                    'exception' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        // Fallback disk lookup
+        foreach (['r2', 'public', 'local'] as $diskName) {
+            try {
+                $disk = Storage::disk($diskName);
+                if ($disk->exists($path)) {
+                    $stream = $disk->readStream($path);
+
+                    if (is_resource($stream)) {
+                        return [$stream, basename($path), $material->mime_type ?: 'application/pdf'];
+                    }
+                }
+            } catch (\Throwable $e) {
+                // Ignore and try next disk
             }
         }
 

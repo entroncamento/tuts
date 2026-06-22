@@ -283,8 +283,9 @@ class SubjectOfficialContentController extends Controller
         $originalName = basename((string) $file->getClientOriginalName());
         $displayName = trim((string) ($validated['name'] ?? '')) ?: $originalName;
         $safeFilename = $this->safeFilename($originalName, $extension);
-        $storedName = (string) Str::uuid() . '-' . $safeFilename;
-        $storagePath = 'subject-materials/subjects/' . $resolvedSubject->id . '/' . $storedName;
+        $materialUuid = (string) Str::uuid();
+        $storageDir = 'subject-materials/subjects/' . $resolvedSubject->id . '/materials/' . $materialUuid;
+        $storagePath = $storageDir . '/' . $safeFilename;
 
         Log::info('[TUTS][Subject Materials] file validated', [
             'user_id' => $user->id,
@@ -298,22 +299,28 @@ class SubjectOfficialContentController extends Controller
         $material = null;
 
         try {
-            $stored = Storage::disk('local')->putFileAs(
-                'subject-materials/subjects/' . $resolvedSubject->id,
+            $storedPath = Storage::disk('r2')->putFileAs(
+                $storageDir,
                 $file,
-                $storedName
+                $safeFilename
             );
 
-            if (!$stored) {
+            if (!$storedPath) {
                 throw new \RuntimeException('storage_write_failed');
             }
 
-            Log::info('[TUTS][Subject Materials] file stored', [
+            $stored = true;
+            $storagePath = $storedPath;
+
+            Log::info('[TUTS][Subject Materials] file stored in R2', [
                 'user_id' => $user->id,
                 'subject_id' => $resolvedSubject->id,
                 'section_id' => $section?->id,
                 'mime_type' => $mimeType,
                 'size_bytes' => $sizeBytes,
+                'disk' => 'r2',
+                'path' => $storagePath,
+                'driver' => config('filesystems.disks.r2.driver', 's3'),
             ]);
 
             $material = SubjectMaterial::create([
@@ -323,6 +330,7 @@ class SubjectOfficialContentController extends Controller
                 'type' => $validated['type'] ?? $this->inferTypeFromUpload($mimeType, $extension),
                 'mime_type' => $mimeType,
                 'size_bytes' => $sizeBytes,
+                'disk' => 'r2',
                 'path' => $storagePath,
                 'url' => null,
                 'source' => 'official',
@@ -336,11 +344,13 @@ class SubjectOfficialContentController extends Controller
                 'material_id' => $material->id,
                 'mime_type' => $material->mime_type,
                 'size_bytes' => $material->size_bytes,
+                'disk' => $material->disk,
+                'path' => $material->path,
             ]);
         } catch (\Throwable $exception) {
-            if ($stored && Storage::disk('local')->exists($storagePath)) {
+            if ($stored && Storage::disk('r2')->exists($storagePath)) {
                 try {
-                    Storage::disk('local')->delete($storagePath);
+                    Storage::disk('r2')->delete($storagePath);
                 } catch (\Throwable) {
                     // Cleanup is best-effort; the original failure remains the response driver.
                 }
@@ -353,6 +363,7 @@ class SubjectOfficialContentController extends Controller
                 'mime_type' => $mimeType,
                 'size_bytes' => $sizeBytes,
                 'error_category' => $exception::class,
+                'error_message' => $exception->getMessage(),
             ]);
 
             return response()->json([
@@ -477,7 +488,7 @@ class SubjectOfficialContentController extends Controller
         ]);
     }
 
-    public function view(Request $request, string $subject, SubjectMaterial $material): \Symfony\Component\HttpFoundation\BinaryFileResponse
+    public function view(Request $request, string $subject, SubjectMaterial $material): \Symfony\Component\HttpFoundation\Response
     {
         $resolvedSubject = $this->resolveSubject($subject);
         $user = $this->user($request);
@@ -489,17 +500,41 @@ class SubjectOfficialContentController extends Controller
         $extension = strtolower(pathinfo($material->path ?: $material->name, PATHINFO_EXTENSION));
         abort_unless(in_array($extension, $inlineExtensions, true), 415, 'Tipo de ficheiro nao suportado para visualizacao.');
 
-        $absolutePath = \Illuminate\Support\Facades\Storage::disk('local')->path($material->path);
-        abort_unless(file_exists($absolutePath), 404, 'Ficheiro nao encontrado.');
+        $diskName = $material->disk ?: 'local';
+        $disk = Storage::disk($diskName);
 
-        return response()->file($absolutePath, [
+        Log::info('[TUTS][SubjectMaterials] serving file view', [
+            'material_id' => $material->id,
+            'subject_id' => $resolvedSubject->id,
+            'disk' => $diskName,
+            'path' => $material->path,
+            'driver' => config("filesystems.disks.{$diskName}.driver", 'unknown'),
+        ]);
+
+        try {
+            $stream = $disk->readStream($material->path);
+        } catch (\Throwable) {
+            $stream = false;
+        }
+
+        if ($stream === false) {
+            abort(404, 'Ficheiro nao encontrado.');
+        }
+
+        return response()->stream(function () use ($stream) {
+            fpassthru($stream);
+            if (is_resource($stream)) {
+                fclose($stream);
+            }
+        }, 200, [
             'Content-Type' => $material->mime_type ?: 'application/octet-stream',
             'Content-Disposition' => 'inline; filename="' . addslashes($material->name) . '"',
+            'Content-Length' => (string) $material->size_bytes,
             'X-Content-Type-Options' => 'nosniff',
         ]);
     }
 
-    public function download(Request $request, string $subject, SubjectMaterial $material): \Symfony\Component\HttpFoundation\BinaryFileResponse
+    public function download(Request $request, string $subject, SubjectMaterial $material): \Symfony\Component\HttpFoundation\Response
     {
         $resolvedSubject = $this->resolveSubject($subject);
         $user = $this->user($request);
@@ -507,10 +542,38 @@ class SubjectOfficialContentController extends Controller
         abort_unless((int) $material->subject_id === (int) $resolvedSubject->id, 404, 'Material nao pertence a esta UC.');
         abort_unless($this->canViewSubject($user, $resolvedSubject), 403, 'Acesso negado.');
 
-        $absolutePath = \Illuminate\Support\Facades\Storage::disk('local')->path($material->path);
-        abort_unless(file_exists($absolutePath), 404, 'Ficheiro nao encontrado.');
+        $diskName = $material->disk ?: 'local';
+        $disk = Storage::disk($diskName);
 
-        return response()->download($absolutePath, $material->name);
+        Log::info('[TUTS][SubjectMaterials] serving file download', [
+            'material_id' => $material->id,
+            'subject_id' => $resolvedSubject->id,
+            'disk' => $diskName,
+            'path' => $material->path,
+            'driver' => config("filesystems.disks.{$diskName}.driver", 'unknown'),
+        ]);
+
+        try {
+            $stream = $disk->readStream($material->path);
+        } catch (\Throwable) {
+            $stream = false;
+        }
+
+        if ($stream === false) {
+            abort(404, 'Ficheiro nao encontrado.');
+        }
+
+        return response()->stream(function () use ($stream) {
+            fpassthru($stream);
+            if (is_resource($stream)) {
+                fclose($stream);
+            }
+        }, 200, [
+            'Content-Type' => $material->mime_type ?: 'application/octet-stream',
+            'Content-Disposition' => 'attachment; filename="' . addslashes($material->name) . '"',
+            'Content-Length' => (string) $material->size_bytes,
+            'X-Content-Type-Options' => 'nosniff',
+        ]);
     }
 
     private function resolveSubject(string $subject): Subject
@@ -588,7 +651,16 @@ class SubjectOfficialContentController extends Controller
             return;
         }
 
-        $disk = Storage::disk('local');
+        $diskName = $material->disk ?: 'local';
+        $disk = Storage::disk($diskName);
+
+        Log::info('[TUTS][Subject Materials] deleting stored file', [
+            'material_id' => $material->id,
+            'subject_id' => $material->subject_id,
+            'disk' => $diskName,
+            'path' => $path,
+            'driver' => config("filesystems.disks.{$diskName}.driver", 'unknown'),
+        ]);
 
         if (!$disk->exists($path)) {
             return;
