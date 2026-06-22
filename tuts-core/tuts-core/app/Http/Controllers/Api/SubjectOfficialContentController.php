@@ -477,6 +477,42 @@ class SubjectOfficialContentController extends Controller
         ]);
     }
 
+    public function view(Request $request, string $subject, SubjectMaterial $material): \Symfony\Component\HttpFoundation\BinaryFileResponse
+    {
+        $resolvedSubject = $this->resolveSubject($subject);
+        $user = $this->user($request);
+
+        abort_unless((int) $material->subject_id === (int) $resolvedSubject->id, 404, 'Material nao pertence a esta UC.');
+        abort_unless($this->canViewSubject($user, $resolvedSubject), 403, 'Acesso negado. Nao esta inscrito no curso desta Unidade Curricular.');
+
+        $inlineExtensions = ['pdf', 'png', 'jpg', 'jpeg', 'webp', 'txt', 'md', 'csv'];
+        $extension = strtolower(pathinfo($material->path ?: $material->name, PATHINFO_EXTENSION));
+        abort_unless(in_array($extension, $inlineExtensions, true), 415, 'Tipo de ficheiro nao suportado para visualizacao.');
+
+        $absolutePath = \Illuminate\Support\Facades\Storage::disk('local')->path($material->path);
+        abort_unless(file_exists($absolutePath), 404, 'Ficheiro nao encontrado.');
+
+        return response()->file($absolutePath, [
+            'Content-Type' => $material->mime_type ?: 'application/octet-stream',
+            'Content-Disposition' => 'inline; filename="' . addslashes($material->name) . '"',
+            'X-Content-Type-Options' => 'nosniff',
+        ]);
+    }
+
+    public function download(Request $request, string $subject, SubjectMaterial $material): \Symfony\Component\HttpFoundation\BinaryFileResponse
+    {
+        $resolvedSubject = $this->resolveSubject($subject);
+        $user = $this->user($request);
+
+        abort_unless((int) $material->subject_id === (int) $resolvedSubject->id, 404, 'Material nao pertence a esta UC.');
+        abort_unless($this->canViewSubject($user, $resolvedSubject), 403, 'Acesso negado.');
+
+        $absolutePath = \Illuminate\Support\Facades\Storage::disk('local')->path($material->path);
+        abort_unless(file_exists($absolutePath), 404, 'Ficheiro nao encontrado.');
+
+        return response()->download($absolutePath, $material->name);
+    }
+
     private function resolveSubject(string $subject): Subject
     {
         $subjectId = Str::startsWith($subject, 'uc-') ? Str::after($subject, 'uc-') : $subject;
@@ -623,6 +659,7 @@ class SubjectOfficialContentController extends Controller
 
     private function formatMaterial(SubjectMaterial $material): array
     {
+        $viewUrl = "/api/subjects/uc-{$material->subject_id}/materials/{$material->id}/view";
         return [
             'id' => (string) $material->id,
             'subject_id' => (string) $material->subject_id,
@@ -634,7 +671,7 @@ class SubjectOfficialContentController extends Controller
             'size_bytes' => $material->size_bytes,
             'source' => $material->source,
             'verified_by_teacher' => $material->verified_by_teacher,
-            'url' => $material->url,
+            'url' => $material->url ?: $viewUrl,
             'created_at' => $material->created_at?->toISOString(),
         ];
     }
