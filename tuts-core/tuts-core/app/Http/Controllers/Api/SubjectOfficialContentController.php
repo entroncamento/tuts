@@ -360,10 +360,13 @@ class SubjectOfficialContentController extends Controller
                 'user_id' => $user->id,
                 'subject_id' => $resolvedSubject->id,
                 'disk' => 'r2',
+                'target_path' => $storagePath,
                 'mime_type' => $mimeType,
                 'size' => $sizeBytes,
                 'exception_class' => $exception::class,
                 'exception_message' => $exception->getMessage(),
+                'previous_exception_class' => $exception->getPrevious() ? get_class($exception->getPrevious()) : null,
+                'previous_exception_message' => $exception->getPrevious() ? $exception->getPrevious()->getMessage() : null,
             ]);
 
             return response()->json([

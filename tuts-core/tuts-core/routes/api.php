@@ -51,3 +51,61 @@ Route::middleware(['throttle:internal', 'internal.api'])->group(function () {
     // Mantivemos a mesma rota que está configurada no services/analise.py do Python
     Route::post('/messages/{id}/metadata', [InternalMessageController::class, 'guardarMetadata']);
 });
+
+// TODO: REMOVE BEFORE DELIVERY - Temporary route to debug R2 storage issues on Render
+Route::get('/_debug/r2', function (\Illuminate\Http\Request $request) {
+    $debugToken = env('R2_DEBUG_TOKEN');
+
+    if (empty($debugToken) || $request->query('token') !== $debugToken) {
+        abort(403, 'Unauthorized debug access.');
+    }
+
+    $r2Config = config('filesystems.disks.r2', []);
+    $defaultDisk = config('filesystems.default');
+
+    $key = $r2Config['key'] ?? null;
+    $secret = $r2Config['secret'] ?? null;
+
+    $responseData = [
+        'filesystems' => [
+            'default' => $defaultDisk,
+        ],
+        'r2' => [
+            'bucket' => $r2Config['bucket'] ?? null,
+            'endpoint' => $r2Config['endpoint'] ?? null,
+            'region' => $r2Config['region'] ?? null,
+            'has_key' => !empty($key),
+            'has_secret' => !empty($secret),
+            'key_length' => !empty($key) ? strlen((string) $key) : 0,
+            'secret_length' => !empty($secret) ? strlen((string) $secret) : 0,
+        ],
+    ];
+
+    $writeTestPath = 'debug/r2-test-' . \Illuminate\Support\Str::uuid() . '.txt';
+    $responseData['write_test_path'] = $writeTestPath;
+
+    try {
+        // Write test
+        $putResult = \Illuminate\Support\Facades\Storage::disk('r2')->put($writeTestPath, 'ok');
+        $responseData['operations']['put'] = $putResult ? 'ok' : 'failed';
+
+        // Exist check test
+        $existsResult = \Illuminate\Support\Facades\Storage::disk('r2')->exists($writeTestPath);
+        $responseData['operations']['exists'] = $existsResult;
+
+        // Delete test
+        $deleteResult = \Illuminate\Support\Facades\Storage::disk('r2')->delete($writeTestPath);
+        $responseData['operations']['delete'] = $deleteResult;
+    } catch (\Throwable $e) {
+        $responseData['operations']['status'] = 'exception';
+        $responseData['error'] = [
+            'exception_class' => get_class($e),
+            'exception_message' => $e->getMessage(),
+            'previous_exception_class' => $e->getPrevious() ? get_class($e->getPrevious()) : null,
+            'previous_exception_message' => $e->getPrevious() ? $e->getPrevious()->getMessage() : null,
+        ];
+    }
+
+    return response()->json($responseData);
+});
+
