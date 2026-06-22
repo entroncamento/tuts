@@ -76,6 +76,90 @@ class ChatController extends Controller
         ], 410);
     }
 
+    private function wantsOldestTemporaryReplacement(Request $request): bool
+    {
+        return $request->boolean('replace_oldest_temporary');
+    }
+
+    private function formatOldestTemporaryChat(?Chat $chat): ?array
+    {
+        if (!$chat) {
+            return null;
+        }
+
+        return [
+            'id' => (int) $chat->id,
+            'title' => $chat->title,
+            'created_at' => $chat->created_at?->toISOString(),
+            'updated_at' => $chat->updated_at?->toISOString(),
+            'expires_at' => $chat->expires_at?->toISOString(),
+        ];
+    }
+
+    private function temporaryChatLimitPayload(?Chat $oldest): array
+    {
+        return [
+            'status' => 'erro',
+            'code' => 'temporary_chat_limit_reached',
+            'message' => 'Chegaste ao limite de 10 conversas temporárias.',
+            'limit' => Chat::MAX_ACTIVE_TEMPORARY_CHATS,
+            'oldest_chat' => $this->formatOldestTemporaryChat($oldest),
+        ];
+    }
+
+    private function createTemporaryChatWithLimit(int $userId, array $chatAttributes, bool $replaceOldest): array
+    {
+        return DB::transaction(function () use ($userId, $chatAttributes, $replaceOldest) {
+            $activeTemporaryChats = Chat::query()
+                ->activeTemporaryForUser($userId)
+                ->orderBy('created_at')
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get();
+
+            $oldest = $activeTemporaryChats->first();
+            $replacedOldestTemporaryChatId = null;
+
+            if ($activeTemporaryChats->count() >= Chat::MAX_ACTIVE_TEMPORARY_CHATS) {
+                if (!$replaceOldest) {
+                    return [
+                        'limit_reached' => true,
+                        'oldest_chat' => $oldest,
+                    ];
+                }
+
+                if ($oldest) {
+                    $oldest->forceFill([
+                        'expires_at' => now(),
+                        'updated_at' => now(),
+                    ])->save();
+
+                    $replacedOldestTemporaryChatId = (int) $oldest->id;
+                }
+            }
+
+            return [
+                'limit_reached' => false,
+                'chat' => Chat::create($chatAttributes),
+                'replaced_oldest_temporary_chat_id' => $replacedOldestTemporaryChatId,
+            ];
+        });
+    }
+
+    private function streamTemporaryChatLimitReached(?Chat $oldest)
+    {
+        return response()->stream(function () use ($oldest) {
+            echo 'data: ' . json_encode($this->temporaryChatLimitPayload($oldest), JSON_UNESCAPED_UNICODE) . "\n\n";
+            echo "data: [DONE]\n\n";
+            @ob_flush();
+            flush();
+        }, 409, [
+            'Content-Type' => 'text/event-stream',
+            'Cache-Control' => 'no-cache',
+            'X-Accel-Buffering' => 'no',
+        ]);
+    }
+
     private function userCanAccessSubject(Subject $subject): bool
     {
         $user = Auth::user();
@@ -634,6 +718,7 @@ class ChatController extends Controller
             'space_id' => 'nullable|exists:study_spaces,id',
             'folder_id' => 'nullable|exists:space_folders,id',
             'context_type' => 'nullable|string|in:uc,space,temporary',
+            'replace_oldest_temporary' => 'nullable',
             'title' => 'nullable|string|max:255',
         ]);
 
@@ -695,14 +780,29 @@ class ChatController extends Controller
 
         if ($contextType === 'temporary') {
             $chatAttributes = array_merge($chatAttributes, $this->temporaryRetentionAttributes());
-        }
 
-        $chat = Chat::create($chatAttributes);
+            $result = $this->createTemporaryChatWithLimit(
+                $userId,
+                $chatAttributes,
+                $this->wantsOldestTemporaryReplacement($request)
+            );
+
+            if ($result['limit_reached']) {
+                return response()->json($this->temporaryChatLimitPayload($result['oldest_chat']), 409);
+            }
+
+            $chat = $result['chat'];
+            $replacedOldestTemporaryChatId = $result['replaced_oldest_temporary_chat_id'];
+        } else {
+            $chat = Chat::create($chatAttributes);
+            $replacedOldestTemporaryChatId = null;
+        }
 
         return response()->json([
             'status' => 'sucesso',
             'chat_id' => $chat->id,
             'chat' => $this->formatChat($chat),
+            'replaced_oldest_temporary_chat_id' => $replacedOldestTemporaryChatId,
         ]);
     }
 
@@ -751,6 +851,7 @@ class ChatController extends Controller
             'section_id' => 'nullable|integer|exists:subject_sections,id',
             'space_id' => 'nullable|integer|exists:study_spaces,id',
             'folder_id' => 'nullable|integer|exists:space_folders,id',
+            'replace_oldest_temporary' => 'nullable',
             'preferencia' => 'nullable|string|in:default,visual,plano,quiz,feynman',
             'imagem' => 'nullable|image|max:4096',
             'attachedMaterialRefs' => 'nullable|string',
@@ -763,6 +864,7 @@ class ChatController extends Controller
         $section = null;
         $space = null;
         $folder = null;
+        $replacedOldestTemporaryChatId = null;
 
         if ($contextType === 'uc') {
             $subject = $this->resolveSubjectForStream($request);
@@ -866,9 +968,23 @@ class ChatController extends Controller
 
             if ($contextType === 'temporary') {
                 $chatAttributes = array_merge($chatAttributes, $this->temporaryRetentionAttributes());
-            }
 
-            $chat = Chat::create($chatAttributes);
+                $result = $this->createTemporaryChatWithLimit(
+                    $userId,
+                    $chatAttributes,
+                    $this->wantsOldestTemporaryReplacement($request)
+                );
+
+                if ($result['limit_reached']) {
+                    return $this->streamTemporaryChatLimitReached($result['oldest_chat']);
+                }
+
+                $chat = $result['chat'];
+                $replacedOldestTemporaryChatId = $result['replaced_oldest_temporary_chat_id'];
+            } else {
+                $chat = Chat::create($chatAttributes);
+                $replacedOldestTemporaryChatId = null;
+            }
         }
 
         $attachedMaterialRefs = $this->resolveAttachedMaterialRefs(
@@ -1021,7 +1137,8 @@ class ChatController extends Controller
             $scopeMaterials,
             $requestId,
             $userId,
-            $adaptabilityPreferences
+            $adaptabilityPreferences,
+            $replacedOldestTemporaryChatId
         ) {
             // Prevenir interrupção prematura do script pelo PHP
             ignore_user_abort(true);
@@ -1034,6 +1151,7 @@ class ChatController extends Controller
             echo 'data: ' . json_encode([
                 'chat_id' => $chatId,
                 'message_id' => $userMessageId,
+                'replaced_oldest_temporary_chat_id' => $replacedOldestTemporaryChatId,
             ], JSON_UNESCAPED_UNICODE) . "\n\n";
 
             // Heartbeat inicial

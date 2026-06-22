@@ -17,6 +17,7 @@ class Chat extends Model
     public const TEMPORARY_RETENTION_DAYS = [7, 15, 30];
     public const DEFAULT_TEMPORARY_RETENTION_DAYS = 7;
     public const MAX_TEMPORARY_RETENTION_DAYS = 30;
+    public const MAX_ACTIVE_TEMPORARY_CHATS = 10;
 
     protected $fillable = [
         'user_id',
@@ -72,6 +73,28 @@ class Chat extends Model
                 });
             });
         });
+    }
+
+    public function scopeActiveTemporaryForUser(Builder $query, int $userId): Builder
+    {
+        return $query->where('user_id', $userId)
+            ->where(function (Builder $query) {
+                $query->where('context_type', 'temporary')
+                    ->orWhere('is_temporary', true);
+            })
+            ->where(function (Builder $query) {
+                $query->whereNull('expires_at')
+                    ->orWhere('expires_at', '>', now());
+            });
+    }
+
+    public static function oldestActiveTemporaryForUser(int $userId): ?self
+    {
+        return static::query()
+            ->activeTemporaryForUser($userId)
+            ->orderBy('created_at')
+            ->orderBy('id')
+            ->first();
     }
 
     public function applyTemporaryRetention(int $days, ?Carbon $from = null): self
