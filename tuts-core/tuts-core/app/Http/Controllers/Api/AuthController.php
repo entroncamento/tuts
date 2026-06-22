@@ -8,6 +8,7 @@ use Illuminate\Auth\Events\Registered;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -21,6 +22,10 @@ class AuthController extends Controller
      */
     public function register(Request $request)
     {
+        $request->merge([
+            'email' => Str::lower(trim((string) $request->input('email'))),
+        ]);
+
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'email' => [
@@ -38,12 +43,18 @@ class AuthController extends Controller
         ]);
 
         $autoVerify = (bool) config('services.api_registration.auto_verify', false);
+        $role = $this->registrationRoleForEmail($validated['email']);
+
+        Log::info('[TUTS][AuthRegister] resolved registration role', [
+            'teacher_whitelist_match' => $role === 'professor',
+            'role' => $role,
+        ]);
 
         $user = User::create([
             'name' => $validated['name'],
             'email' => $validated['email'],
             'password' => Hash::make($validated['password']),
-            'role' => 'aluno',
+            'role' => $role,
         ]);
 
         if ($autoVerify) {
@@ -67,6 +78,31 @@ class AuthController extends Controller
                 'role' => $user->role,
             ],
         ], 201);
+    }
+
+    private function registrationRoleForEmail(string $email): string
+    {
+        return $this->isTeacherEmail($email) ? 'professor' : 'aluno';
+    }
+
+    private function isTeacherEmail(string $email): bool
+    {
+        $normalizedEmail = Str::lower(trim($email));
+        $whitelist = config('services.api_registration.teacher_email_whitelist', []);
+
+        if (!is_array($whitelist)) {
+            $whitelist = explode(',', (string) $whitelist);
+        }
+
+        foreach ($whitelist as $teacherEmail) {
+            $normalizedTeacherEmail = Str::lower(trim((string) $teacherEmail));
+
+            if ($normalizedTeacherEmail !== '' && hash_equals($normalizedTeacherEmail, $normalizedEmail)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

@@ -49,6 +49,10 @@ return [
     'api_registration' => [
         // Demo/dev/staging only. Keep false in production once real email delivery is configured.
         'auto_verify' => env('TUTS_AUTO_VERIFY_API_REGISTER', false),
+        'teacher_email_whitelist' => array_values(array_filter(array_map(
+            fn (string $email): string => strtolower(trim($email)),
+            explode(',', (string) env('TEACHER_EMAIL_WHITELIST', ''))
+        ))),
     ],
 
     'rag' => [
