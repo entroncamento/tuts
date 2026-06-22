@@ -127,6 +127,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('/', [ChatController::class, 'listarChats']);
         Route::get('/ucs', [ChatController::class, 'listarChatsPorUC']);
         Route::get('/{id}', [ChatController::class, 'obterHistorico']);
+        Route::patch('/{chat}/retention', [ChatController::class, 'atualizarRetencao']);
         Route::post('/', [ChatController::class, 'criarChat'])->middleware('throttle:chat.create');
         Route::post('/stream', [ChatController::class, 'enviarPerguntaStream'])->middleware('throttle:chat.stream');
     });

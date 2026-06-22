@@ -706,6 +706,40 @@ class ChatController extends Controller
         ]);
     }
 
+    public function atualizarRetencao(Request $request, Chat $chat)
+    {
+        $userId = $this->requireAuthenticatedUserId();
+
+        abort_unless((int) $chat->user_id === $userId, 404);
+
+        if (!$chat->isTemporary()) {
+            return response()->json([
+                'status' => 'erro',
+                'message' => 'A retenção só pode ser alterada em conversas temporárias.',
+            ], 422);
+        }
+
+        if ($chat->isExpired()) {
+            return $this->expiredTemporaryChatResponse((int) $chat->id);
+        }
+
+        $validated = $request->validate([
+            'retention_days' => 'required|integer|in:' . implode(',', Chat::TEMPORARY_RETENTION_DAYS),
+        ]);
+
+        $baseDate = $chat->created_at ?? now();
+
+        $chat->applyTemporaryRetention((int) $validated['retention_days'], $baseDate);
+        $chat->save();
+
+        return response()->json([
+            'status' => 'sucesso',
+            'chat' => array_merge([
+                'id' => (int) $chat->id,
+            ], $this->formatChat($chat->fresh())),
+        ]);
+    }
+
     public function enviarPerguntaStream(Request $request)
     {
         $request->validate([

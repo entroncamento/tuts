@@ -121,4 +121,130 @@ class TemporaryChatRetentionTest extends TestCase
 
         $chat->applyTemporaryRetention(90, now());
     }
+
+    public function test_authenticated_user_can_update_own_temporary_chat_retention(): void
+    {
+        $user = User::factory()->create();
+        $createdAt = now()->subDays(2)->startOfSecond();
+
+        $chat = Chat::create([
+            'user_id' => $user->id,
+            'context_type' => 'temporary',
+            'is_temporary' => true,
+            'retention_days' => 7,
+            'expires_at' => $createdAt->copy()->addDays(7),
+            'title' => 'Temporary',
+        ]);
+        $chat->forceFill([
+            'created_at' => $createdAt,
+            'updated_at' => $createdAt,
+        ])->save();
+
+        $response = $this->actingAs($user)->patchJson("/api/chat/{$chat->id}/retention", [
+            'retention_days' => 15,
+        ]);
+
+        $response->assertOk()
+            ->assertJsonPath('status', 'sucesso')
+            ->assertJsonPath('chat.id', $chat->id)
+            ->assertJsonPath('chat.chat_id', $chat->id)
+            ->assertJsonPath('chat.context_type', 'temporary')
+            ->assertJsonPath('chat.is_temporary', true)
+            ->assertJsonPath('chat.retention_days', 15)
+            ->assertJsonPath('chat.expires_at', $createdAt->copy()->addDays(15)->toISOString());
+
+        $this->assertDatabaseHas('chats', [
+            'id' => $chat->id,
+            'retention_days' => 15,
+        ]);
+
+        $this->assertTrue($chat->fresh()->expires_at->eq($createdAt->copy()->addDays(15)));
+    }
+
+    public function test_invalid_temporary_chat_retention_returns_validation_error(): void
+    {
+        $user = User::factory()->create();
+
+        $chat = Chat::create([
+            'user_id' => $user->id,
+            'context_type' => 'temporary',
+            'is_temporary' => true,
+            'retention_days' => 7,
+            'expires_at' => now()->addDays(7),
+            'title' => 'Temporary',
+        ]);
+
+        $response = $this->actingAs($user)->patchJson("/api/chat/{$chat->id}/retention", [
+            'retention_days' => 31,
+        ]);
+
+        $response->assertUnprocessable()
+            ->assertJsonValidationErrors(['retention_days']);
+    }
+
+    public function test_non_temporary_chat_cannot_update_retention(): void
+    {
+        $user = User::factory()->create();
+
+        $chat = Chat::create([
+            'user_id' => $user->id,
+            'context_type' => 'uc',
+            'is_temporary' => false,
+            'title' => 'UC chat',
+        ]);
+
+        $response = $this->actingAs($user)->patchJson("/api/chat/{$chat->id}/retention", [
+            'retention_days' => 15,
+        ]);
+
+        $response->assertUnprocessable()
+            ->assertJsonPath('status', 'erro');
+
+        $this->assertNull($chat->fresh()->retention_days);
+        $this->assertNull($chat->fresh()->expires_at);
+    }
+
+    public function test_expired_temporary_chat_cannot_update_retention(): void
+    {
+        $user = User::factory()->create();
+
+        $chat = Chat::create([
+            'user_id' => $user->id,
+            'context_type' => 'temporary',
+            'is_temporary' => true,
+            'retention_days' => 7,
+            'expires_at' => now()->subMinute(),
+            'title' => 'Expired temporary',
+        ]);
+
+        $response = $this->actingAs($user)->patchJson("/api/chat/{$chat->id}/retention", [
+            'retention_days' => 15,
+        ]);
+
+        $response->assertGone()
+            ->assertJsonPath('status', 'expired');
+    }
+
+    public function test_user_cannot_update_another_users_temporary_chat_retention(): void
+    {
+        $owner = User::factory()->create();
+        $otherUser = User::factory()->create();
+
+        $chat = Chat::create([
+            'user_id' => $owner->id,
+            'context_type' => 'temporary',
+            'is_temporary' => true,
+            'retention_days' => 7,
+            'expires_at' => now()->addDays(7),
+            'title' => 'Other user chat',
+        ]);
+
+        $response = $this->actingAs($otherUser)->patchJson("/api/chat/{$chat->id}/retention", [
+            'retention_days' => 15,
+        ]);
+
+        $response->assertNotFound();
+
+        $this->assertSame(7, $chat->fresh()->retention_days);
+    }
 }
