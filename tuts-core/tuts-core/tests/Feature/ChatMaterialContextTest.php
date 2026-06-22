@@ -10,6 +10,7 @@ use App\Models\Subject;
 use App\Models\SubjectMaterial;
 use App\Models\User;
 use App\Services\ChatMaterialContextService;
+use App\Services\ChatRetrievalPlanBuilder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use InvalidArgumentException;
 use Tests\TestCase;
@@ -433,5 +434,232 @@ class ChatMaterialContextTest extends TestCase
             'chat_id' => $chat->id,
             'personal_material_id' => $otherMaterial->id,
         ]);
+    }
+
+    /**
+     * Test UC chat with no attached materials produces subject base_context.
+     */
+    public function test_builder_uc_chat_with_no_materials(): void
+    {
+        $user = User::factory()->create();
+        $subject = Subject::create([
+            'name' => 'Math',
+            'acronym' => 'MATH',
+        ]);
+        
+        $chat = Chat::create([
+            'user_id' => $user->id,
+            'subject_id' => $subject->id,
+            'context_type' => 'uc',
+            'title' => 'Math Chat',
+        ]);
+
+        $builder = new ChatRetrievalPlanBuilder();
+        $plan = $builder->buildForChat($chat);
+
+        $this->assertEquals($chat->id, $plan['chat_id']);
+        $this->assertEquals('uc', $plan['context_type']);
+        $this->assertEquals('subject', $plan['base_context']['type']);
+        $this->assertEquals($subject->id, $plan['base_context']['subject_id']);
+        $this->assertNull($plan['base_context']['section_id']);
+        $this->assertEmpty($plan['active_materials']);
+    }
+
+    /**
+     * Test Section chat produces section base_context if section_id exists.
+     */
+    public function test_builder_section_chat_produces_section_context(): void
+    {
+        $user = User::factory()->create();
+        $subject = Subject::create([
+            'name' => 'Math',
+            'acronym' => 'MATH',
+        ]);
+
+        $sectionId = \Illuminate\Support\Facades\DB::table('subject_sections')->insertGetId([
+            'subject_id' => $subject->id,
+            'name' => 'Section A',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $chat = Chat::create([
+            'user_id' => $user->id,
+            'subject_id' => $subject->id,
+            'section_id' => $sectionId,
+            'context_type' => 'uc',
+            'title' => 'Section Chat',
+        ]);
+
+        $builder = new ChatRetrievalPlanBuilder();
+        $plan = $builder->buildForChat($chat);
+
+        $this->assertEquals('section', $plan['base_context']['type']);
+        $this->assertEquals($subject->id, $plan['base_context']['subject_id']);
+        $this->assertEquals($sectionId, $plan['base_context']['section_id']);
+    }
+
+    /**
+     * Test Temporary chat with active personal material includes no subject base context but includes active personal material.
+     */
+    public function test_builder_temporary_chat_with_active_personal_material(): void
+    {
+        $user = User::factory()->create();
+        
+        $chat = Chat::create([
+            'user_id' => $user->id,
+            'context_type' => 'temporary',
+            'title' => 'Temp Chat',
+        ]);
+
+        $material = PersonalMaterial::create([
+            'owner_id' => $user->id,
+            'uploaded_by' => $user->id,
+            'original_name' => 'temp_doc.pdf',
+            'storage_disk' => 'r2',
+            'storage_key' => 'keys/temp_doc.pdf',
+        ]);
+
+        $this->service->activatePersonalMaterial($chat, $material);
+
+        $builder = new ChatRetrievalPlanBuilder();
+        $plan = $builder->buildForChat($chat);
+
+        $this->assertEquals('temporary', $plan['base_context']['type']);
+        $this->assertNull($plan['base_context']['subject_id']);
+        
+        $this->assertCount(1, $plan['active_materials']);
+        $this->assertEquals('personal', $plan['active_materials'][0]['source']);
+        $this->assertEquals($material->id, $plan['active_materials'][0]['personal_material_id']);
+        $this->assertEquals($user->id, $plan['active_materials'][0]['user_id']);
+    }
+
+    /**
+     * Test UC chat with active personal + subject material includes both active materials.
+     */
+    public function test_builder_uc_chat_with_personal_and_subject_materials(): void
+    {
+        $user = User::factory()->create();
+        $subject = Subject::create([
+            'name' => 'Math',
+            'acronym' => 'MATH',
+        ]);
+
+        $chat = Chat::create([
+            'user_id' => $user->id,
+            'subject_id' => $subject->id,
+            'context_type' => 'uc',
+            'title' => 'Math Chat',
+        ]);
+
+        $pMaterial = PersonalMaterial::create([
+            'owner_id' => $user->id,
+            'uploaded_by' => $user->id,
+            'original_name' => 'p_doc.pdf',
+            'storage_disk' => 'r2',
+            'storage_key' => 'keys/p_doc.pdf',
+        ]);
+
+        $sMaterial = SubjectMaterial::create([
+            'subject_id' => $subject->id,
+            'name' => 's_doc.pdf',
+            'disk' => 'r2',
+            'path' => 's_doc.pdf',
+        ]);
+
+        $this->service->activatePersonalMaterial($chat, $pMaterial);
+        $this->service->activateSubjectMaterial($chat, $sMaterial);
+
+        $builder = new ChatRetrievalPlanBuilder();
+        $plan = $builder->buildForChat($chat);
+
+        $this->assertEquals('subject', $plan['base_context']['type']);
+        $this->assertCount(2, $plan['active_materials']);
+
+        $personal = collect($plan['active_materials'])->firstWhere('source', 'personal');
+        $this->assertNotNull($personal);
+        $this->assertEquals($pMaterial->id, $personal['personal_material_id']);
+
+        $subjectMat = collect($plan['active_materials'])->firstWhere('source', 'subject');
+        $this->assertNotNull($subjectMat);
+        $this->assertEquals($sMaterial->id, $subjectMat['subject_material_id']);
+        $this->assertEquals($subject->id, $subjectMat['subject_id']);
+    }
+
+    /**
+     * Test Expired/inactive contexts are excluded.
+     */
+    public function test_builder_excludes_expired_and_inactive_contexts(): void
+    {
+        $user = User::factory()->create();
+        
+        $chat = Chat::create([
+            'user_id' => $user->id,
+            'context_type' => 'temporary',
+            'title' => 'Temp Chat',
+        ]);
+
+        $material1 = PersonalMaterial::create([
+            'owner_id' => $user->id,
+            'uploaded_by' => $user->id,
+            'original_name' => 'doc1.pdf',
+            'storage_disk' => 'r2',
+            'storage_key' => 'keys/doc1.pdf',
+        ]);
+
+        $material2 = PersonalMaterial::create([
+            'owner_id' => $user->id,
+            'uploaded_by' => $user->id,
+            'original_name' => 'doc2.pdf',
+            'storage_disk' => 'r2',
+            'storage_key' => 'keys/doc2.pdf',
+        ]);
+
+        $this->service->activatePersonalMaterial($chat, $material1);
+
+        $context2 = $this->service->activatePersonalMaterial($chat, $material2);
+        $context2->update(['active' => false]);
+
+        $builder = new ChatRetrievalPlanBuilder();
+        $plan = $builder->buildForChat($chat);
+
+        $this->assertCount(1, $plan['active_materials']);
+        $this->assertEquals($material1->id, $plan['active_materials'][0]['personal_material_id']);
+    }
+
+    /**
+     * Test Personal context with mismatched user_id is skipped.
+     */
+    public function test_builder_skips_mismatched_personal_material_context(): void
+    {
+        $user = User::factory()->create();
+        $otherUser = User::factory()->create();
+
+        $chat = Chat::create([
+            'user_id' => $user->id,
+            'context_type' => 'temporary',
+            'title' => 'Temp Chat',
+        ]);
+
+        $material = PersonalMaterial::create([
+            'owner_id' => $otherUser->id,
+            'uploaded_by' => $otherUser->id,
+            'original_name' => 'other_doc.pdf',
+            'storage_disk' => 'r2',
+            'storage_key' => 'keys/other_doc.pdf',
+        ]);
+
+        ChatMaterialContext::create([
+            'chat_id' => $chat->id,
+            'user_id' => $otherUser->id,
+            'source' => 'personal',
+            'personal_material_id' => $material->id,
+            'active' => true,
+        ]);
+
+        $builder = new ChatRetrievalPlanBuilder();
+        $plan = $builder->buildForChat($chat);
+
+        $this->assertEmpty($plan['active_materials']);
     }
 }
