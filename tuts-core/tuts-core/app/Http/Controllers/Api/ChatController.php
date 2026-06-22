@@ -1368,6 +1368,7 @@ class ChatController extends Controller
             $contextType,
             $subject,
             $section,
+            $space,
             $attachedMaterialRefs,
             $personalMaterialIds,
             $subjectMaterialIds,
