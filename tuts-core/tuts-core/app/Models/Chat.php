@@ -140,4 +140,14 @@ class Chat extends Model
     {
         return $this->hasMany(Message::class);
     }
+
+    public function materialContexts(): HasMany
+    {
+        return $this->hasMany(ChatMaterialContext::class);
+    }
+
+    public function activeMaterialContexts(): HasMany
+    {
+        return $this->materialContexts()->active()->notExpired();
+    }
 }
