@@ -24,6 +24,13 @@ class ChatMaterialContextTest extends TestCase
     {
         parent::setUp();
         $this->service = new ChatMaterialContextService();
+        
+        config([
+            'services.python.internal_token' => 'mocked-internal-token',
+            'services.python.url' => 'http://127.0.0.1:8001/perguntar',
+        ]);
+
+        $this->withoutMiddleware();
     }
 
     /**
@@ -207,5 +214,224 @@ class ChatMaterialContextTest extends TestCase
 
         $this->assertCount(1, $activeList);
         $this->assertEquals($material1->id, $activeList->first()->subject_material_id);
+    }
+
+    /**
+     * Test attaching a personal material to a message via controller creates and activates context.
+     */
+    public function test_controller_attaching_personal_material_creates_active_context(): void
+    {
+        $user = User::factory()->create(['role' => 'aluno']);
+        
+        $chat = Chat::create([
+            'user_id' => $user->id,
+            'context_type' => 'temporary',
+            'is_temporary' => true,
+            'title' => 'Personal Material Attachment Chat',
+        ]);
+
+        $material = PersonalMaterial::create([
+            'owner_id' => $user->id,
+            'uploaded_by' => $user->id,
+            'original_name' => 'my_doc.pdf',
+            'storage_disk' => 'r2',
+            'storage_key' => 'keys/my_doc.pdf',
+        ]);
+
+        $attachedRefs = [
+            [
+                'source' => 'personal',
+                'material_id' => $material->id,
+            ]
+        ];
+
+        // Call the stream endpoint
+        $response = $this->actingAs($user)
+            ->postJson('/api/chat/stream', [
+                'texto' => 'Teste com anexo pessoal',
+                'chat_id' => $chat->id,
+                'context_type' => 'temporary',
+                'attachedMaterialRefs' => json_encode($attachedRefs),
+            ]);
+
+        // Even if connection to RAG fails / returns error, the database transaction
+        // creates the message and active context first.
+        $this->assertDatabaseHas('chat_material_contexts', [
+            'chat_id' => $chat->id,
+            'user_id' => $user->id,
+            'source' => 'personal',
+            'personal_material_id' => $material->id,
+            'active' => true,
+        ]);
+    }
+
+    /**
+     * Test attaching a subject material to a message via controller creates and activates context.
+     */
+    public function test_controller_attaching_subject_material_creates_active_context(): void
+    {
+        $user = User::factory()->create(['role' => 'aluno']);
+        $subject = Subject::create([
+            'name' => 'Sistemas Operativos',
+            'acronym' => 'SO',
+        ]);
+        
+        // Authorize user to subject
+        \Illuminate\Support\Facades\DB::table('subject_user')->insert([
+            'user_id' => $user->id,
+            'subject_id' => $subject->id,
+            'role' => 'student',
+            'status' => 'active',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $chat = Chat::create([
+            'user_id' => $user->id,
+            'subject_id' => $subject->id,
+            'context_type' => 'uc',
+            'title' => 'Subject Material Attachment Chat',
+        ]);
+
+        $material = SubjectMaterial::create([
+            'subject_id' => $subject->id,
+            'name' => 'Aula1.pdf',
+            'disk' => 'r2',
+            'path' => 'aula1.pdf',
+        ]);
+
+        $attachedRefs = [
+            [
+                'source' => 'subject',
+                'material_id' => $material->id,
+                'subject_id' => $subject->id,
+            ]
+        ];
+
+        $response = $this->actingAs($user)
+            ->postJson('/api/chat/stream', [
+                'texto' => 'Teste com anexo de UC',
+                'chat_id' => $chat->id,
+                'subject_id' => $subject->id,
+                'context_type' => 'uc',
+                'attachedMaterialRefs' => json_encode($attachedRefs),
+            ]);
+
+        $this->assertDatabaseHas('chat_material_contexts', [
+            'chat_id' => $chat->id,
+            'user_id' => $user->id,
+            'source' => 'subject',
+            'subject_material_id' => $material->id,
+            'subject_id' => $subject->id,
+            'active' => true,
+        ]);
+    }
+
+    /**
+     * Test attaching the same material twice reuses the existing active context row.
+     */
+    public function test_controller_attaching_same_material_twice_reuses_existing_active_context_row(): void
+    {
+        $user = User::factory()->create(['role' => 'aluno']);
+        
+        $chat = Chat::create([
+            'user_id' => $user->id,
+            'context_type' => 'temporary',
+            'is_temporary' => true,
+            'title' => 'Duplicate Attachment Chat',
+        ]);
+
+        $material = PersonalMaterial::create([
+            'owner_id' => $user->id,
+            'uploaded_by' => $user->id,
+            'original_name' => 'my_doc.pdf',
+            'storage_disk' => 'r2',
+            'storage_key' => 'keys/my_doc.pdf',
+        ]);
+
+        $attachedRefs = [
+            [
+                'source' => 'personal',
+                'material_id' => $material->id,
+            ]
+        ];
+
+        // Send first attachment message
+        $this->actingAs($user)
+            ->postJson('/api/chat/stream', [
+                'texto' => 'Primeira vez',
+                'chat_id' => $chat->id,
+                'context_type' => 'temporary',
+                'attachedMaterialRefs' => json_encode($attachedRefs),
+            ]);
+
+        $firstContext = ChatMaterialContext::where('chat_id', $chat->id)
+            ->where('personal_material_id', $material->id)
+            ->first();
+        
+        $this->assertNotNull($firstContext);
+        $this->assertTrue($firstContext->active);
+
+        // Send second attachment message for same material
+        $this->actingAs($user)
+            ->postJson('/api/chat/stream', [
+                'texto' => 'Segunda vez',
+                'chat_id' => $chat->id,
+                'context_type' => 'temporary',
+                'attachedMaterialRefs' => json_encode($attachedRefs),
+            ]);
+
+        // Total row count in chat_material_contexts for this chat & material should still be 1
+        $totalRows = ChatMaterialContext::where('chat_id', $chat->id)
+            ->where('personal_material_id', $material->id)
+            ->count();
+        $this->assertEquals(1, $totalRows);
+    }
+
+    /**
+     * Test unauthorized personal material is not activated.
+     */
+    public function test_controller_attaching_unauthorized_personal_material_fails(): void
+    {
+        $user = User::factory()->create(['role' => 'aluno']);
+        $otherUser = User::factory()->create(['role' => 'aluno']);
+        
+        $chat = Chat::create([
+            'user_id' => $user->id,
+            'context_type' => 'temporary',
+            'is_temporary' => true,
+            'title' => 'Hack Chat',
+        ]);
+
+        // Material owned by otherUser
+        $otherMaterial = PersonalMaterial::create([
+            'owner_id' => $otherUser->id,
+            'uploaded_by' => $otherUser->id,
+            'original_name' => 'private_doc.pdf',
+            'storage_disk' => 'r2',
+            'storage_key' => 'keys/private_doc.pdf',
+        ]);
+
+        $attachedRefs = [
+            [
+                'source' => 'personal',
+                'material_id' => $otherMaterial->id,
+            ]
+        ];
+
+        // Send message with otherUser's material. Should result in 404/403 or ValidationException model resolving error
+        $response = $this->actingAs($user)
+            ->postJson('/api/chat/stream', [
+                'texto' => 'Tentativa de roubo de anexo',
+                'chat_id' => $chat->id,
+                'context_type' => 'temporary',
+                'attachedMaterialRefs' => json_encode($attachedRefs),
+            ]);
+
+        // Model not activated in context
+        $this->assertDatabaseMissing('chat_material_contexts', [
+            'chat_id' => $chat->id,
+            'personal_material_id' => $otherMaterial->id,
+        ]);
     }
 }

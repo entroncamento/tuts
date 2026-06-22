@@ -13,6 +13,7 @@ use App\Models\Subject;
 use App\Models\SubjectMaterial;
 use App\Models\SubjectSection;
 use App\Services\RagService;
+use App\Services\ChatMaterialContextService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Context;
@@ -27,10 +28,12 @@ class ChatController extends Controller
     private const MAX_PERSONAL_ATTACHMENT_BYTES = 5 * 1024 * 1024;
 
     protected $ragService;
+    protected $chatMaterialContextService;
 
-    public function __construct(RagService $ragService)
+    public function __construct(RagService $ragService, ChatMaterialContextService $chatMaterialContextService)
     {
         $this->ragService = $ragService;
+        $this->chatMaterialContextService = $chatMaterialContextService;
     }
 
     private function buildHistorico(int $chat_id): string
@@ -1136,6 +1139,84 @@ class ChatController extends Controller
         });
 
         $userMessageId = (int) $userMessage->id;
+
+        // Activate chat-level material contexts
+        $activatedCount = 0;
+        foreach ($attachedMaterialRefs as $ref) {
+            $source = $ref['source'] ?? '';
+            $materialId = (int) ($ref['material_id'] ?? 0);
+
+            try {
+                if ($source === 'personal') {
+                    $material = PersonalMaterial::find($materialId);
+                    if ($material) {
+                        $this->chatMaterialContextService->activatePersonalMaterial($chat, $material, $userMessage);
+                        $activatedCount++;
+                    } else {
+                        Log::warning('[TUTS][ChatMaterialContext] Personal material not found for context activation', [
+                            'chat_id' => $chatId,
+                            'message_id' => $userMessageId,
+                            'user_id' => $userId,
+                            'source' => $source,
+                            'material_id' => $materialId,
+                            'skipped_reason' => 'not_found',
+                        ]);
+                    }
+                } elseif ($source === 'subject') {
+                    $material = SubjectMaterial::find($materialId);
+                    if ($material) {
+                        $this->chatMaterialContextService->activateSubjectMaterial($chat, $material, $userMessage);
+                        $activatedCount++;
+                    } else {
+                        Log::warning('[TUTS][ChatMaterialContext] Subject material not found for context activation', [
+                            'chat_id' => $chatId,
+                            'message_id' => $userMessageId,
+                            'user_id' => $userId,
+                            'source' => $source,
+                            'material_id' => $materialId,
+                            'skipped_reason' => 'not_found',
+                        ]);
+                    }
+                } else {
+                    Log::info('[TUTS][ChatMaterialContext] Material source skipped for context activation', [
+                        'chat_id' => $chatId,
+                        'message_id' => $userMessageId,
+                        'user_id' => $userId,
+                        'source' => $source,
+                        'material_id' => $materialId,
+                        'skipped_reason' => 'unsupported_source',
+                    ]);
+                }
+            } catch (\InvalidArgumentException $e) {
+                Log::error('[TUTS][ChatMaterialContext] Authorization/Security failure activating material context', [
+                    'chat_id' => $chatId,
+                    'message_id' => $userMessageId,
+                    'user_id' => $userId,
+                    'source' => $source,
+                    'material_id' => $materialId,
+                    'exception_message' => $e->getMessage(),
+                ]);
+                throw $e;
+            } catch (\Throwable $e) {
+                Log::warning('[TUTS][ChatMaterialContext] Unexpected failure activating material context', [
+                    'chat_id' => $chatId,
+                    'message_id' => $userMessageId,
+                    'user_id' => $userId,
+                    'source' => $source,
+                    'material_id' => $materialId,
+                    'exception_class' => get_class($e),
+                ]);
+            }
+        }
+
+        if ($activatedCount > 0) {
+            Log::info('[TUTS][ChatMaterialContext] Material contexts activated', [
+                'chat_id' => $chatId,
+                'message_id' => $userMessageId,
+                'user_id' => $userId,
+                'activated_count' => $activatedCount,
+            ]);
+        }
 
         try {
             \App\Jobs\AnalyzeStudentMessageForTeacherInsights::dispatch($userMessageId);
