@@ -68,7 +68,7 @@ return [
             'bucket' => env('CLOUDFLARE_R2_BUCKET'),
             'endpoint' => env('CLOUDFLARE_R2_ENDPOINT'),
             'use_path_style_endpoint' => true,
-            'throw' => false,
+            'throw' => true,
         ],
 
     ],
