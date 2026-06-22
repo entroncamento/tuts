@@ -38,6 +38,9 @@ WORKDIR /app
 # app code
 COPY . .
 
+# PHP runtime upload limits for Render/prod images.
+COPY docker/php/conf.d/uploads.ini /usr/local/etc/php/conf.d/uploads.ini
+
 # PHP deps
 RUN composer install \
     --no-dev \
