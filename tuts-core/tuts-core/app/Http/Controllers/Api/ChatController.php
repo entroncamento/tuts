@@ -758,6 +758,17 @@ class ChatController extends Controller
                 'sent' => true,
                 'fallback_reason' => null,
             ]);
+
+            Log::info('[TUTS][TemporaryChat]', [
+                'context_type' => $contextType,
+                'chat_id' => (int) $chat->id,
+                'message_id' => $userMessageId,
+                'subject_id_presence' => $subject !== null,
+                'section_id_presence' => $section !== null,
+                'retrieval_plan_base_context_type' => $baseCtx['type'] ?? null,
+                'active_material_count' => $activeCount,
+                'whether_rag_was_called' => true,
+            ]);
         } else {
             Log::info('[TUTS][ChatRetrievalPlan] Outgoing payload details', [
                 'chat_id' => (int) $chat->id,
@@ -772,6 +783,17 @@ class ChatController extends Controller
                 ],
                 'sent' => false,
                 'fallback_reason' => 'Failed to build plan or exception caught',
+            ]);
+
+            Log::info('[TUTS][TemporaryChat]', [
+                'context_type' => $contextType,
+                'chat_id' => (int) $chat->id,
+                'message_id' => $userMessageId,
+                'subject_id_presence' => $subject !== null,
+                'section_id_presence' => $section !== null,
+                'retrieval_plan_base_context_type' => null,
+                'active_material_count' => 0,
+                'whether_rag_was_called' => true,
             ]);
         }
 
@@ -1455,6 +1477,9 @@ class ChatController extends Controller
                 $postFields['imagem'] = new \CURLFile($imagemPath, $imagemMime, $imagemNome);
             }
 
+            $retrievalPlan = isset($postFields['retrieval_plan']) ? json_decode($postFields['retrieval_plan'], true) : null;
+            $hasLoggedDelta = false;
+
             $buffer = '';
             $fullAiText = '';
             $rawRagBody = '';
@@ -1475,7 +1500,7 @@ class ChatController extends Controller
                 CURLOPT_CONNECTTIMEOUT => 15,
                 CURLOPT_TIMEOUT => 120, // Aumentado para streams longos
 
-                CURLOPT_WRITEFUNCTION => function ($curl, $chunk) use (&$buffer, &$fullAiText, &$rawRagBody, &$lastHeartbeat) {
+                CURLOPT_WRITEFUNCTION => function ($curl, $chunk) use (&$buffer, &$fullAiText, &$rawRagBody, &$lastHeartbeat, $contextType, $chatId, $userMessageId, $subject, $section, &$retrievalPlan, &$hasLoggedDelta) {
                     if (connection_aborted()) {
                         return 0; // Para o cURL se o cliente desconectar
                     }
@@ -1516,6 +1541,20 @@ class ChatController extends Controller
                             if (strlen($fullAiText) < 20000) {
                                 $fullAiText .= $decoded['chunk'];
                             }
+                            if (!$hasLoggedDelta) {
+                                $hasLoggedDelta = true;
+                                Log::info('[TUTS][TemporaryChat] SSE emitted delta', [
+                                    'context_type' => $contextType,
+                                    'chat_id' => $chatId,
+                                    'message_id' => $userMessageId,
+                                    'subject_id_presence' => $subject !== null,
+                                    'section_id_presence' => $section !== null,
+                                    'retrieval_plan_base_context_type' => $retrievalPlan['base_context']['type'] ?? null,
+                                    'active_material_count' => count($retrievalPlan['active_materials'] ?? []),
+                                    'whether_rag_was_called' => true,
+                                    'sse_event' => 'delta',
+                                ]);
+                            }
                         }
 
                         echo "data: {$payload}\n\n";
@@ -1537,6 +1576,20 @@ class ChatController extends Controller
                 $this->ragService->reportFailure();
             } else {
                 $this->ragService->reportSuccess();
+            }
+
+            if ($curlError || $responseCode >= 400) {
+                Log::info('[TUTS][TemporaryChat] SSE emitted error', [
+                    'context_type' => $contextType,
+                    'chat_id' => $chatId,
+                    'message_id' => $userMessageId,
+                    'subject_id_presence' => $subject !== null,
+                    'section_id_presence' => $section !== null,
+                    'retrieval_plan_base_context_type' => $retrievalPlan['base_context']['type'] ?? null,
+                    'active_material_count' => count($retrievalPlan['active_materials'] ?? []),
+                    'whether_rag_was_called' => true,
+                    'sse_event' => 'error',
+                ]);
             }
 
             if ($curlError) {
@@ -1621,6 +1674,17 @@ class ChatController extends Controller
                 }
 
                 echo "data: [DONE]\n\n";
+                Log::info('[TUTS][TemporaryChat] SSE emitted done', [
+                    'context_type' => $contextType,
+                    'chat_id' => $chatId,
+                    'message_id' => $userMessageId,
+                    'subject_id_presence' => $subject !== null,
+                    'section_id_presence' => $section !== null,
+                    'retrieval_plan_base_context_type' => $retrievalPlan['base_context']['type'] ?? null,
+                    'active_material_count' => count($retrievalPlan['active_materials'] ?? []),
+                    'whether_rag_was_called' => true,
+                    'sse_event' => 'done',
+                ]);
                 @ob_flush();
                 flush();
             }
