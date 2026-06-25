@@ -103,6 +103,7 @@ class DatabaseSeeder extends Seeder
         $this->command->info('👨‍🏫 Professor de teste: professor@ua.pt / password123');
 
         $this->call(AdminBackofficeDemoSeeder::class);
+        $this->call(TutsDemoAccountsSeeder::class);
     }
 
     private function ensureSubjectUcMetadata(Subject $subject): void
