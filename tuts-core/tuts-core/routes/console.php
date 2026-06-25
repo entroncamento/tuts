@@ -10,6 +10,14 @@ Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');
 
+Artisan::command('tuts:seed-student-dashboard-demo', function () {
+    $this->info('Starting Student Dashboard Demo Seeder...');
+    $seeder = new \Database\Seeders\StudentDashboardDemoSeeder();
+    $seeder->setCommand($this);
+    $seeder->run();
+    $this->info('All done!');
+})->purpose('Seed fake student activity data for Redes de Computadores to test the teacher dashboard.');
+
 Artisan::command('tuts:notify-test {--user= : ID ou email do utilizador} {--type=system : reminder, system, study, chat, rag, success, warning ou error} {--force : Permite executar em producao}', function () {
     if (app()->isProduction() && ! $this->option('force')) {
         $this->error('Este comando cria notificacoes de teste. Usa --force para executar em producao.');
