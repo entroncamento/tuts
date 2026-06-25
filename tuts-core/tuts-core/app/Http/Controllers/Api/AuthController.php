@@ -145,6 +145,14 @@ class AuthController extends Controller
         /** @var \App\Models\User $user */
         $user = Auth::user();
 
+        // Check if user is blocked
+        if ($user->blocked_at !== null) {
+            Auth::guard('web')->logout();
+            throw ValidationException::withMessages([
+                'email' => ['A sua conta foi bloqueada ou desativada pela administração.'],
+            ]);
+        }
+
         // 4. Barreira de Verificação de Email (Alinhado com a nossa mudança no User.php)
         if ($user instanceof \Illuminate\Contracts\Auth\MustVerifyEmail && !$user->hasVerifiedEmail()) {
             Auth::guard('web')->logout();

@@ -34,6 +34,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'internal.api' => \App\Http\Middleware\VerifyInternalApiToken::class,
             'metrics' => \App\Http\Middleware\MetricsMiddleware::class,
+            'admin' => \App\Http\Middleware\RoleAdminMiddleware::class,
         ]);
 
         // ── SECURITY HEADERS GLOBAIS ─────────────────────────────────────────
