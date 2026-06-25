@@ -356,14 +356,17 @@ class SubjectOfficialContentController extends Controller
                 }
             }
 
-            Log::warning('[TUTS][Subject Materials] upload failed', [
+            Log::error('[TUTS][SubjectMaterials][Storage] upload failed', [
                 'user_id' => $user->id,
                 'subject_id' => $resolvedSubject->id,
-                'section_id' => $section?->id,
+                'disk' => 'r2',
+                'target_path' => $storagePath,
                 'mime_type' => $mimeType,
-                'size_bytes' => $sizeBytes,
-                'error_category' => $exception::class,
-                'error_message' => $exception->getMessage(),
+                'size' => $sizeBytes,
+                'exception_class' => $exception::class,
+                'exception_message' => $exception->getMessage(),
+                'previous_exception_class' => $exception->getPrevious() ? get_class($exception->getPrevious()) : null,
+                'previous_exception_message' => $exception->getPrevious() ? $exception->getPrevious()->getMessage() : null,
             ]);
 
             return response()->json([
@@ -383,7 +386,21 @@ class SubjectOfficialContentController extends Controller
                 'size_bytes' => $material->size_bytes,
             ]);
 
-            $ragResult = $ragIngestion->ingestSubjectMaterial($material);
+            try {
+                $ragResult = $ragIngestion->ingestSubjectMaterial($material);
+            } catch (\Throwable $e) {
+                Log::error('[TUTS][SubjectMaterials][RAG] Ingestion crashed during upload', [
+                    'material_id' => $material->id,
+                    'subject_id' => $resolvedSubject->id,
+                    'error' => $e->getMessage(),
+                    'exception' => $e,
+                ]);
+                $ragResult = [
+                    'status' => 'failed',
+                    'message' => 'Material guardado, mas ocorreu um erro ao comunicar com o RAG.',
+                    'reason' => 'ingestion_crash',
+                ];
+            }
         }
 
         Log::info('[TUTS][Subject Materials] upload completed', [
@@ -424,7 +441,21 @@ class SubjectOfficialContentController extends Controller
             'size_bytes' => $material->size_bytes,
         ]);
 
-        $result = $ragIngestion->ingestSubjectMaterial($material);
+        try {
+            $result = $ragIngestion->ingestSubjectMaterial($material);
+        } catch (\Throwable $e) {
+            Log::error('[TUTS][SubjectMaterials][RAG] Ingestion crashed during manual request', [
+                'material_id' => $material->id,
+                'subject_id' => $resolvedSubject->id,
+                'error' => $e->getMessage(),
+                'exception' => $e,
+            ]);
+            $result = [
+                'status' => 'failed',
+                'message' => 'Ocorreu um erro ao indexar o material no RAG.',
+                'reason' => 'ingestion_crash',
+            ];
+        }
 
         return response()->json([
             'status' => 'sucesso',

@@ -13,6 +13,8 @@ use App\Models\Subject;
 use App\Models\SubjectMaterial;
 use App\Models\SubjectSection;
 use App\Services\RagService;
+use App\Services\ChatMaterialContextService;
+use App\Services\ChatRetrievalPlanBuilder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Context;
@@ -27,10 +29,12 @@ class ChatController extends Controller
     private const MAX_PERSONAL_ATTACHMENT_BYTES = 5 * 1024 * 1024;
 
     protected $ragService;
+    protected $chatMaterialContextService;
 
-    public function __construct(RagService $ragService)
+    public function __construct(RagService $ragService, ChatMaterialContextService $chatMaterialContextService)
     {
         $this->ragService = $ragService;
+        $this->chatMaterialContextService = $chatMaterialContextService;
     }
 
     private function buildHistorico(int $chat_id): string
@@ -662,6 +666,140 @@ class ChatController extends Controller
         return [$files, $metadata, $tempPaths];
     }
 
+    public function buildRetrievalPlanForChat(Chat $chat): ?array
+    {
+        try {
+            $builder = app(ChatRetrievalPlanBuilder::class);
+            return $builder->buildForChat($chat);
+        } catch (\Throwable $e) {
+            Log::warning('[TUTS][ChatRetrievalPlan] Failed to build retrieval plan: ' . $e->getMessage(), [
+                'chat_id' => $chat->id,
+                'exception' => $e,
+            ]);
+            return null;
+        }
+    }
+
+    public function buildRagRequestPayload(
+        Chat $chat,
+        string $texto,
+        string $uc,
+        string $preferencia,
+        string $threadId,
+        string $historico,
+        int $userMessageId,
+        $subject,
+        $section,
+        $space,
+        string $contextType,
+        ?string $adaptabilityPreferences,
+        array $attachedMaterialRefs,
+        array $personalMaterialIds,
+        array $subjectMaterialIds,
+        array $spaceMaterialIds,
+        array $scopeSubjectMaterialIds,
+        array $scopeMaterials
+    ): array {
+        $postFields = [
+            'texto' => $texto,
+            'uc' => $uc,
+            'preferencia' => $preferencia,
+            'thread_id' => $threadId,
+            'historico' => $historico,
+            'message_id' => $userMessageId,
+            'subject_id' => $subject?->id,
+            'section_id' => $section?->id,
+            'attached_material_refs' => json_encode($attachedMaterialRefs, JSON_UNESCAPED_UNICODE),
+            'personal_material_ids' => json_encode($personalMaterialIds, JSON_UNESCAPED_UNICODE),
+            'subject_material_ids' => json_encode($subjectMaterialIds, JSON_UNESCAPED_UNICODE),
+            'space_material_ids' => json_encode($spaceMaterialIds, JSON_UNESCAPED_UNICODE),
+            'scope_subject_material_ids' => json_encode($scopeSubjectMaterialIds, JSON_UNESCAPED_UNICODE),
+            'scope_materials' => json_encode($scopeMaterials, JSON_UNESCAPED_UNICODE),
+            'context_type' => $contextType,
+            'chat_id' => (int) $chat->id,
+        ];
+
+        if ($adaptabilityPreferences !== null) {
+            $postFields['adaptability_preferences'] = $adaptabilityPreferences;
+        }
+
+        // Build and inject retrieval plan
+        $retrievalPlan = $this->buildRetrievalPlanForChat($chat);
+        if ($retrievalPlan !== null) {
+            $postFields['retrieval_plan'] = json_encode($retrievalPlan, JSON_UNESCAPED_UNICODE);
+            
+            // Logging as required by requirement 6
+            $personalCount = 0;
+            $subjectCount = 0;
+            $activeCount = count($retrievalPlan['active_materials'] ?? []);
+            foreach (($retrievalPlan['active_materials'] ?? []) as $mat) {
+                if (($mat['source'] ?? '') === 'personal') {
+                    $personalCount++;
+                } elseif (($mat['source'] ?? '') === 'subject') {
+                    $subjectCount++;
+                }
+            }
+            $baseCtx = $retrievalPlan['base_context'] ?? [];
+            Log::info('[TUTS][ChatRetrievalPlan] Outgoing payload details', [
+                'chat_id' => (int) $chat->id,
+                'user_id' => (int) $chat->user_id,
+                'context_type' => $contextType,
+                'base_context_type' => $baseCtx['type'] ?? null,
+                'base_context_ids' => [
+                    'subject_id' => $baseCtx['subject_id'] ?? null,
+                    'section_id' => $baseCtx['section_id'] ?? null,
+                    'space_id' => $baseCtx['space_id'] ?? null,
+                ],
+                'active_materials_count' => $activeCount,
+                'source_counts' => [
+                    'personal' => $personalCount,
+                    'subject' => $subjectCount,
+                ],
+                'sent' => true,
+                'fallback_reason' => null,
+            ]);
+
+            Log::info('[TUTS][TemporaryChat]', [
+                'context_type' => $contextType,
+                'chat_id' => (int) $chat->id,
+                'message_id' => $userMessageId,
+                'subject_id_presence' => $subject !== null,
+                'section_id_presence' => $section !== null,
+                'retrieval_plan_base_context_type' => $baseCtx['type'] ?? null,
+                'active_material_count' => $activeCount,
+                'whether_rag_was_called' => true,
+            ]);
+        } else {
+            Log::info('[TUTS][ChatRetrievalPlan] Outgoing payload details', [
+                'chat_id' => (int) $chat->id,
+                'user_id' => (int) $chat->user_id,
+                'context_type' => $contextType,
+                'base_context_type' => null,
+                'base_context_ids' => [],
+                'active_materials_count' => 0,
+                'source_counts' => [
+                    'personal' => 0,
+                    'subject' => 0,
+                ],
+                'sent' => false,
+                'fallback_reason' => 'Failed to build plan or exception caught',
+            ]);
+
+            Log::info('[TUTS][TemporaryChat]', [
+                'context_type' => $contextType,
+                'chat_id' => (int) $chat->id,
+                'message_id' => $userMessageId,
+                'subject_id_presence' => $subject !== null,
+                'section_id_presence' => $section !== null,
+                'retrieval_plan_base_context_type' => null,
+                'active_material_count' => 0,
+                'whether_rag_was_called' => true,
+            ]);
+        }
+
+        return $postFields;
+    }
+
     private function formatMaterialRef($ref): array
     {
         return [
@@ -1137,6 +1275,84 @@ class ChatController extends Controller
 
         $userMessageId = (int) $userMessage->id;
 
+        // Activate chat-level material contexts
+        $activatedCount = 0;
+        foreach ($attachedMaterialRefs as $ref) {
+            $source = $ref['source'] ?? '';
+            $materialId = (int) ($ref['material_id'] ?? 0);
+
+            try {
+                if ($source === 'personal') {
+                    $material = PersonalMaterial::find($materialId);
+                    if ($material) {
+                        $this->chatMaterialContextService->activatePersonalMaterial($chat, $material, $userMessage);
+                        $activatedCount++;
+                    } else {
+                        Log::warning('[TUTS][ChatMaterialContext] Personal material not found for context activation', [
+                            'chat_id' => $chatId,
+                            'message_id' => $userMessageId,
+                            'user_id' => $userId,
+                            'source' => $source,
+                            'material_id' => $materialId,
+                            'skipped_reason' => 'not_found',
+                        ]);
+                    }
+                } elseif ($source === 'subject') {
+                    $material = SubjectMaterial::find($materialId);
+                    if ($material) {
+                        $this->chatMaterialContextService->activateSubjectMaterial($chat, $material, $userMessage);
+                        $activatedCount++;
+                    } else {
+                        Log::warning('[TUTS][ChatMaterialContext] Subject material not found for context activation', [
+                            'chat_id' => $chatId,
+                            'message_id' => $userMessageId,
+                            'user_id' => $userId,
+                            'source' => $source,
+                            'material_id' => $materialId,
+                            'skipped_reason' => 'not_found',
+                        ]);
+                    }
+                } else {
+                    Log::info('[TUTS][ChatMaterialContext] Material source skipped for context activation', [
+                        'chat_id' => $chatId,
+                        'message_id' => $userMessageId,
+                        'user_id' => $userId,
+                        'source' => $source,
+                        'material_id' => $materialId,
+                        'skipped_reason' => 'unsupported_source',
+                    ]);
+                }
+            } catch (\InvalidArgumentException $e) {
+                Log::error('[TUTS][ChatMaterialContext] Authorization/Security failure activating material context', [
+                    'chat_id' => $chatId,
+                    'message_id' => $userMessageId,
+                    'user_id' => $userId,
+                    'source' => $source,
+                    'material_id' => $materialId,
+                    'exception_message' => $e->getMessage(),
+                ]);
+                throw $e;
+            } catch (\Throwable $e) {
+                Log::warning('[TUTS][ChatMaterialContext] Unexpected failure activating material context', [
+                    'chat_id' => $chatId,
+                    'message_id' => $userMessageId,
+                    'user_id' => $userId,
+                    'source' => $source,
+                    'material_id' => $materialId,
+                    'exception_class' => get_class($e),
+                ]);
+            }
+        }
+
+        if ($activatedCount > 0) {
+            Log::info('[TUTS][ChatMaterialContext] Material contexts activated', [
+                'chat_id' => $chatId,
+                'message_id' => $userMessageId,
+                'user_id' => $userId,
+                'activated_count' => $activatedCount,
+            ]);
+        }
+
         try {
             \App\Jobs\AnalyzeStudentMessageForTeacherInsights::dispatch($userMessageId);
         } catch (\Exception $e) {
@@ -1174,6 +1390,7 @@ class ChatController extends Controller
             $contextType,
             $subject,
             $section,
+            $space,
             $attachedMaterialRefs,
             $personalMaterialIds,
             $subjectMaterialIds,
@@ -1205,28 +1422,26 @@ class ChatController extends Controller
             @ob_flush();
             flush();
 
-            $postFields = [
-                'texto' => $texto,
-                'uc' => $uc,
-                'preferencia' => $preferencia,
-                'thread_id' => $threadId,
-                'historico' => $historico,
-                'message_id' => $userMessageId,
-                'subject_id' => $subject?->id,
-                'section_id' => $section?->id,
-                'attached_material_refs' => json_encode($attachedMaterialRefs, JSON_UNESCAPED_UNICODE),
-                'personal_material_ids' => json_encode($personalMaterialIds, JSON_UNESCAPED_UNICODE),
-                'subject_material_ids' => json_encode($subjectMaterialIds, JSON_UNESCAPED_UNICODE),
-                'space_material_ids' => json_encode($spaceMaterialIds, JSON_UNESCAPED_UNICODE),
-                'scope_subject_material_ids' => json_encode($scopeSubjectMaterialIds, JSON_UNESCAPED_UNICODE),
-                'scope_materials' => json_encode($scopeMaterials, JSON_UNESCAPED_UNICODE),
-                'context_type' => $contextType,
-                'chat_id' => $chatId,
-            ];
-
-            if ($adaptabilityPreferences !== null) {
-                $postFields['adaptability_preferences'] = $adaptabilityPreferences;
-            }
+            $postFields = $this->buildRagRequestPayload(
+                $chat,
+                $texto,
+                $uc,
+                $preferencia,
+                $threadId,
+                $historico,
+                $userMessageId,
+                $subject,
+                $section,
+                $space,
+                $contextType,
+                $adaptabilityPreferences,
+                $attachedMaterialRefs,
+                $personalMaterialIds,
+                $subjectMaterialIds,
+                $spaceMaterialIds,
+                $scopeSubjectMaterialIds,
+                $scopeMaterials
+            );
 
             [$personalFiles, $personalFileRefs, $personalTempPaths] = $this->preparePersonalFilesForRag(
                 $attachedMaterialRefs,
@@ -1262,6 +1477,9 @@ class ChatController extends Controller
                 $postFields['imagem'] = new \CURLFile($imagemPath, $imagemMime, $imagemNome);
             }
 
+            $retrievalPlan = isset($postFields['retrieval_plan']) ? json_decode($postFields['retrieval_plan'], true) : null;
+            $hasLoggedDelta = false;
+
             $buffer = '';
             $fullAiText = '';
             $rawRagBody = '';
@@ -1282,7 +1500,7 @@ class ChatController extends Controller
                 CURLOPT_CONNECTTIMEOUT => 15,
                 CURLOPT_TIMEOUT => 120, // Aumentado para streams longos
 
-                CURLOPT_WRITEFUNCTION => function ($curl, $chunk) use (&$buffer, &$fullAiText, &$rawRagBody, &$lastHeartbeat) {
+                CURLOPT_WRITEFUNCTION => function ($curl, $chunk) use (&$buffer, &$fullAiText, &$rawRagBody, &$lastHeartbeat, $contextType, $chatId, $userMessageId, $subject, $section, &$retrievalPlan, &$hasLoggedDelta) {
                     if (connection_aborted()) {
                         return 0; // Para o cURL se o cliente desconectar
                     }
@@ -1323,6 +1541,20 @@ class ChatController extends Controller
                             if (strlen($fullAiText) < 20000) {
                                 $fullAiText .= $decoded['chunk'];
                             }
+                            if (!$hasLoggedDelta) {
+                                $hasLoggedDelta = true;
+                                Log::info('[TUTS][TemporaryChat] SSE emitted delta', [
+                                    'context_type' => $contextType,
+                                    'chat_id' => $chatId,
+                                    'message_id' => $userMessageId,
+                                    'subject_id_presence' => $subject !== null,
+                                    'section_id_presence' => $section !== null,
+                                    'retrieval_plan_base_context_type' => $retrievalPlan['base_context']['type'] ?? null,
+                                    'active_material_count' => count($retrievalPlan['active_materials'] ?? []),
+                                    'whether_rag_was_called' => true,
+                                    'sse_event' => 'delta',
+                                ]);
+                            }
                         }
 
                         echo "data: {$payload}\n\n";
@@ -1344,6 +1576,20 @@ class ChatController extends Controller
                 $this->ragService->reportFailure();
             } else {
                 $this->ragService->reportSuccess();
+            }
+
+            if ($curlError || $responseCode >= 400) {
+                Log::info('[TUTS][TemporaryChat] SSE emitted error', [
+                    'context_type' => $contextType,
+                    'chat_id' => $chatId,
+                    'message_id' => $userMessageId,
+                    'subject_id_presence' => $subject !== null,
+                    'section_id_presence' => $section !== null,
+                    'retrieval_plan_base_context_type' => $retrievalPlan['base_context']['type'] ?? null,
+                    'active_material_count' => count($retrievalPlan['active_materials'] ?? []),
+                    'whether_rag_was_called' => true,
+                    'sse_event' => 'error',
+                ]);
             }
 
             if ($curlError) {
@@ -1428,6 +1674,17 @@ class ChatController extends Controller
                 }
 
                 echo "data: [DONE]\n\n";
+                Log::info('[TUTS][TemporaryChat] SSE emitted done', [
+                    'context_type' => $contextType,
+                    'chat_id' => $chatId,
+                    'message_id' => $userMessageId,
+                    'subject_id_presence' => $subject !== null,
+                    'section_id_presence' => $section !== null,
+                    'retrieval_plan_base_context_type' => $retrievalPlan['base_context']['type'] ?? null,
+                    'active_material_count' => count($retrievalPlan['active_materials'] ?? []),
+                    'whether_rag_was_called' => true,
+                    'sse_event' => 'done',
+                ]);
                 @ob_flush();
                 flush();
             }

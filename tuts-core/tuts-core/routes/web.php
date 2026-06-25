@@ -138,6 +138,69 @@ Route::middleware('auth')->group(function () {
         return Inertia::render('DashboardProfessor');
     })->middleware('can:view-dashboard')->name('dashboard.professor');
 
+    Route::middleware('admin')->prefix('api/admin')->group(function () {
+        Route::get('/health', function () {
+            return response()->json([
+                'status' => 'ok',
+                'role' => auth()->user()->role,
+                'message' => 'Admin area is healthy and operational.'
+            ]);
+        });
+        Route::get('/me', function () {
+            return response()->json([
+                'user' => [
+                    'id' => auth()->user()->id,
+                    'name' => auth()->user()->name,
+                    'email' => auth()->user()->email,
+                    'role' => auth()->user()->role,
+                ]
+            ]);
+        });
+
+        // Visão Geral / Dashboard stats
+        Route::get('/overview', [\App\Http\Controllers\Api\Admin\AdminOverviewController::class, 'index']);
+
+        // Gestão de Utilizadores
+        Route::get('/users', [\App\Http\Controllers\Api\Admin\AdminUserController::class, 'index']);
+        Route::get('/users/{id}', [\App\Http\Controllers\Api\Admin\AdminUserController::class, 'show']);
+        Route::post('/users', [\App\Http\Controllers\Api\Admin\AdminUserController::class, 'store']);
+        Route::patch('/users/{id}', [\App\Http\Controllers\Api\Admin\AdminUserController::class, 'update']);
+        Route::patch('/users/{id}/role', [\App\Http\Controllers\Api\Admin\AdminUserController::class, 'updateRole']);
+        Route::patch('/users/{id}/block', [\App\Http\Controllers\Api\Admin\AdminUserController::class, 'toggleBlock']);
+        Route::delete('/users/{id}', [\App\Http\Controllers\Api\Admin\AdminUserController::class, 'destroy']);
+
+        // Gestão de Cursos e UCs (Subjects)
+        Route::get('/courses', [\App\Http\Controllers\Api\Admin\AdminCourseController::class, 'index']);
+        Route::post('/courses', [\App\Http\Controllers\Api\Admin\AdminCourseController::class, 'store']);
+        Route::get('/courses/{id}', [\App\Http\Controllers\Api\Admin\AdminCourseController::class, 'show']);
+        Route::patch('/courses/{id}', [\App\Http\Controllers\Api\Admin\AdminCourseController::class, 'update']);
+
+        Route::get('/subjects', [\App\Http\Controllers\Api\Admin\AdminSubjectController::class, 'index']);
+        Route::post('/subjects', [\App\Http\Controllers\Api\Admin\AdminSubjectController::class, 'store']);
+        Route::get('/subjects/{id}', [\App\Http\Controllers\Api\Admin\AdminSubjectController::class, 'show']);
+        Route::patch('/subjects/{id}', [\App\Http\Controllers\Api\Admin\AdminSubjectController::class, 'update']);
+        Route::delete('/subjects/{id}', [\App\Http\Controllers\Api\Admin\AdminSubjectController::class, 'destroy']);
+
+        // Gestão de Materiais
+        Route::get('/materials', [\App\Http\Controllers\Api\Admin\AdminMaterialController::class, 'index']);
+        Route::get('/materials/{id}', [\App\Http\Controllers\Api\Admin\AdminMaterialController::class, 'show']);
+        Route::patch('/materials/{id}', [\App\Http\Controllers\Api\Admin\AdminMaterialController::class, 'update']);
+        Route::delete('/materials/{id}', [\App\Http\Controllers\Api\Admin\AdminMaterialController::class, 'destroy']);
+        Route::post('/materials/{id}/reingest', [\App\Http\Controllers\Api\Admin\AdminMaterialController::class, 'reingest']);
+
+        // Operações RAG / IA
+        Route::get('/rag/health', [\App\Http\Controllers\Api\Admin\AdminRagController::class, 'health']);
+        Route::get('/rag/materials', [\App\Http\Controllers\Api\Admin\AdminRagController::class, 'materials']);
+        Route::post('/rag/materials/{id}/reingest', [\App\Http\Controllers\Api\Admin\AdminRagController::class, 'reingest']);
+        Route::post('/rag/test-query', [\App\Http\Controllers\Api\Admin\AdminRagController::class, 'testQuery']);
+
+        // Logs de Auditoria
+        Route::get('/audit-logs', [\App\Http\Controllers\Api\Admin\AdminAuditLogController::class, 'index']);
+
+        // Estado do Sistema
+        Route::get('/system/health', [\App\Http\Controllers\Api\Admin\AdminSystemController::class, 'health']);
+    });
+
     Route::get('/novo', function () {
         return Inertia::render('TutsNew');
     });
@@ -166,7 +229,7 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/{any}', function () {
         return Inertia::render('TutsNew');
-    })->where('any', 'home|chat|ucs|uc/.*|spaces|space/.*|calendar|planificacao.*|meus-planos|profile|dashboard|notificacoes|notifications');
+    })->where('any', 'home|chat|ucs|uc/.*|spaces|space/.*|calendar|planificacao.*|meus-planos|profile|dashboard|notificacoes|notifications|admin|admin/.*');
 });
 
 require __DIR__ . '/auth.php';

@@ -71,8 +71,14 @@ class RagIngestionService
                     'source' => $material->source ?: 'official',
                     'verified' => $material->verified_by_teacher ? 'true' : 'false',
                 ]);
-        } catch (ConnectionException) {
-            return $this->failed($material, 'connection_failed');
+        } catch (\Throwable $e) {
+            Log::warning('[TUTS][RAG Ingestion] HTTP request failed', [
+                'material_id' => $material->id,
+                'subject_id' => $material->subject_id,
+                'error_message' => $e->getMessage(),
+                'exception_class' => get_class($e),
+            ]);
+            return $this->failed($material, 'rag_request_failed');
         } finally {
             if (is_resource($stream)) {
                 fclose($stream);

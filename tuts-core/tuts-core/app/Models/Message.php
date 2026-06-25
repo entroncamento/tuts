@@ -30,4 +30,9 @@ class Message extends Model
     {
         return $this->hasOne(StudentMessageAnalysis::class);
     }
+
+    public function addedMaterialContexts(): HasMany
+    {
+        return $this->hasMany(ChatMaterialContext::class, 'added_from_message_id');
+    }
 }

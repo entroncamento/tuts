@@ -136,6 +136,14 @@ class AuthController extends Controller
         /** @var \App\Models\User $user */
         $user = Auth::user();
 
+        // Check if user is blocked
+        if ($user->blocked_at !== null) {
+            Auth::guard('web')->logout();
+            throw ValidationException::withMessages([
+                'email' => ['A sua conta foi bloqueada ou desativada pela administração.'],
+            ]);
+        }
+
         // 4. Prevenção contra Session Fixation
         $request->session()->regenerate();
 
