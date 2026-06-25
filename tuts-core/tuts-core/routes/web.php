@@ -26,7 +26,7 @@ Route::post('/api/register', [AuthController::class, 'register'])
 Route::post('/api/login', [AuthController::class, 'login'])
     ->middleware('throttle:5,1');
 
-Route::middleware(['auth', 'verified'])->group(function () {
+Route::middleware('auth')->group(function () {
     Route::post('/api/logout', [AuthController::class, 'logout']);
     Route::get('/api/me', [AuthController::class, 'me']);
 

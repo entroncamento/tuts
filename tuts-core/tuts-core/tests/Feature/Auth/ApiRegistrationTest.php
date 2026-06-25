@@ -14,7 +14,7 @@ class ApiRegistrationTest extends TestCase
 
     public function test_api_registration_creates_student_for_non_whitelisted_email(): void
     {
-        Event::fake();
+        Event::fake([Registered::class]);
         config(['services.api_registration.teacher_email_whitelist' => ['teacher@ua.pt']]);
 
         $response = $this->postJson('/api/register', $this->validPayload([
@@ -29,13 +29,14 @@ class ApiRegistrationTest extends TestCase
         $this->assertDatabaseHas('users', [
             'email' => 'student@ua.pt',
             'role' => 'aluno',
-            'email_verified_at' => null,
         ]);
+
+        $this->assertNotNull(User::where('email', 'student@ua.pt')->firstOrFail()->email_verified_at);
     }
 
     public function test_api_registration_creates_professor_for_whitelisted_email(): void
     {
-        Event::fake();
+        Event::fake([Registered::class]);
         config(['services.api_registration.teacher_email_whitelist' => ['teacher@ua.pt']]);
 
         $response = $this->postJson('/api/register', $this->validPayload([
@@ -50,8 +51,85 @@ class ApiRegistrationTest extends TestCase
         $this->assertDatabaseHas('users', [
             'email' => 'teacher@ua.pt',
             'role' => 'professor',
-            'email_verified_at' => null,
         ]);
+
+        $this->assertNotNull(User::where('email', 'teacher@ua.pt')->firstOrFail()->email_verified_at);
+    }
+
+    public function test_registered_student_can_login_immediately(): void
+    {
+        Event::fake([Registered::class]);
+        config(['services.api_registration.teacher_email_whitelist' => ['teacher@ua.pt']]);
+
+        $this->postJson('/api/register', $this->validPayload([
+            'email' => 'student@ua.pt',
+        ]))->assertCreated();
+
+        $response = $this->postJson('/api/login', [
+            'email' => 'student@ua.pt',
+            'password' => 'password',
+        ]);
+
+        $response
+            ->assertOk()
+            ->assertJsonPath('user.email', 'student@ua.pt')
+            ->assertJsonPath('user.role', 'aluno');
+    }
+
+    public function test_registered_whitelisted_professor_can_login_immediately(): void
+    {
+        Event::fake([Registered::class]);
+        config(['services.api_registration.teacher_email_whitelist' => ['teacher@ua.pt']]);
+
+        $this->postJson('/api/register', $this->validPayload([
+            'email' => 'teacher@ua.pt',
+        ]))->assertCreated();
+
+        $response = $this->postJson('/api/login', [
+            'email' => 'teacher@ua.pt',
+            'password' => 'password',
+        ]);
+
+        $response
+            ->assertOk()
+            ->assertJsonPath('user.email', 'teacher@ua.pt')
+            ->assertJsonPath('user.role', 'professor');
+    }
+
+    public function test_api_login_does_not_fail_when_email_verified_at_is_null(): void
+    {
+        $user = User::factory()->unverified()->create([
+            'email' => 'unverified@ua.pt',
+            'role' => 'aluno',
+        ]);
+
+        $response = $this->postJson('/api/login', [
+            'email' => $user->email,
+            'password' => 'password',
+        ]);
+
+        $response
+            ->assertOk()
+            ->assertJsonPath('user.email', 'unverified@ua.pt')
+            ->assertJsonPath('user.role', 'aluno');
+    }
+
+    public function test_api_me_after_login_returns_user_role(): void
+    {
+        User::factory()->create([
+            'email' => 'student@ua.pt',
+            'role' => 'aluno',
+        ]);
+
+        $this->postJson('/api/login', [
+            'email' => 'student@ua.pt',
+            'password' => 'password',
+        ])->assertOk();
+
+        $this->getJson('/api/me')
+            ->assertOk()
+            ->assertJsonPath('user.email', 'student@ua.pt')
+            ->assertJsonPath('user.role', 'aluno');
     }
 
     public function test_api_registration_rejects_frontend_role(): void
@@ -119,20 +197,16 @@ class ApiRegistrationTest extends TestCase
         ]);
     }
 
-    public function test_api_registration_dispatches_registered_event(): void
+    public function test_api_registration_does_not_dispatch_registered_event(): void
     {
-        Event::fake();
+        Event::fake([Registered::class]);
         config(['services.api_registration.teacher_email_whitelist' => []]);
 
         $this->postJson('/api/register', $this->validPayload([
             'email' => 'student@ua.pt',
         ]))->assertCreated();
 
-        Event::assertDispatched(Registered::class, function (Registered $event): bool {
-            return $event->user instanceof User
-                && $event->user->email === 'student@ua.pt'
-                && $event->user->email_verified_at === null;
-        });
+        Event::assertNotDispatched(Registered::class);
     }
 
     private function validPayload(array $overrides = []): array

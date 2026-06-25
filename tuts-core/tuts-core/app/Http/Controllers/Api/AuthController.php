@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
-use Illuminate\Auth\Events\Registered;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
@@ -17,8 +16,8 @@ use Illuminate\Validation\Rules;
 class AuthController extends Controller
 {
     /**
-     * Registo API — cria apenas contas de aluno e envia email de verificação.
-     * Não inicia sessão; o frontend deve encaminhar para login após verificação.
+     * Registo API — cria contas prontas para login no protótipo.
+     * Não inicia sessão; o frontend deve encaminhar para login.
      */
     public function register(Request $request)
     {
@@ -42,7 +41,6 @@ class AuthController extends Controller
             'professor_key' => 'prohibited',
         ]);
 
-        $autoVerify = (bool) config('services.api_registration.auto_verify', false);
         $role = $this->registrationRoleForEmail($validated['email']);
 
         Log::info('[TUTS][AuthRegister] resolved registration role', [
@@ -57,20 +55,13 @@ class AuthController extends Controller
             'role' => $role,
         ]);
 
-        if ($autoVerify) {
-            // Demo/dev/staging unblock only: enable while real email delivery is unavailable.
-            $user->forceFill([
-                'email_verified_at' => now(),
-            ])->save();
-        } else {
-            event(new Registered($user));
-        }
+        $user->forceFill([
+            'email_verified_at' => now(),
+        ])->save();
 
         return response()->json([
             'status' => 'sucesso',
-            'message' => $autoVerify
-                ? 'Conta criada com sucesso. Já podes iniciar sessão.'
-                : 'Conta criada com sucesso. Verifica o teu email antes de iniciar sessão.',
+            'message' => 'Conta criada com sucesso. Já podes iniciar sessão.',
             'user' => [
                 'id' => $user->id,
                 'name' => $user->name,
@@ -145,15 +136,7 @@ class AuthController extends Controller
         /** @var \App\Models\User $user */
         $user = Auth::user();
 
-        // 4. Barreira de Verificação de Email (Alinhado com a nossa mudança no User.php)
-        if ($user instanceof \Illuminate\Contracts\Auth\MustVerifyEmail && !$user->hasVerifiedEmail()) {
-            Auth::guard('web')->logout();
-            throw ValidationException::withMessages([
-                'email' => ['A sua conta ainda não foi verificada. Por favor, verifique a sua caixa de correio institucional (@ua.pt).'],
-            ]);
-        }
-
-        // 5. Prevenção contra Session Fixation
+        // 4. Prevenção contra Session Fixation
         $request->session()->regenerate();
 
         return response()->json([
