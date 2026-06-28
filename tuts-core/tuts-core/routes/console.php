@@ -18,6 +18,50 @@ Artisan::command('tuts:seed-student-dashboard-demo', function () {
     $this->info('All done!');
 })->purpose('Seed fake student activity data for Redes de Computadores to test the teacher dashboard.');
 
+Artisan::command('tuts:rag-reingest-demo', function (\App\Services\RagIngestionService $ragIngestion) {
+    $this->info('Starting RAG Ingestion for all official PDF materials...');
+    
+    $materials = \App\Models\SubjectMaterial::with('subject')->get();
+    $total = $materials->count();
+    $success = 0;
+    $failed = 0;
+    $skipped = 0;
+    
+    foreach ($materials as $index => $material) {
+        $num = $index + 1;
+        $this->info("[{$num}/{$total}] Processing: {$material->name} (Subject: {$material->subject->acronym})");
+        
+        $mimeType = strtolower((string) $material->mime_type);
+        $extension = strtolower((string) pathinfo($material->path ?: $material->url ?: $material->name, PATHINFO_EXTENSION));
+        $type = strtolower((string) $material->type);
+
+        $isPdf = $mimeType === 'application/pdf' || $extension === 'pdf' || $type === 'pdf';
+        
+        if (!$isPdf) {
+            $this->comment("  Skipped: not a PDF.");
+            $skipped++;
+            continue;
+        }
+        
+        try {
+            $result = $ragIngestion->ingestSubjectMaterial($material);
+            if (isset($result['status']) && $result['status'] === 'success') {
+                $this->info("  Success! Chunks created or updated.");
+                $success++;
+            } else {
+                $this->error("  Failed: " . ($result['reason'] ?? $result['message'] ?? 'unknown_reason'));
+                $failed++;
+            }
+        } catch (\Exception $e) {
+            $this->error("  Error occurred: " . $e->getMessage());
+            $failed++;
+        }
+    }
+    
+    $this->info("\nAll completed! Success: {$success}, Failed: {$failed}, Skipped: {$skipped}");
+})->purpose('Reingest all seeded official PDF materials into RAG');
+
+
 Artisan::command('tuts:notify-test {--user= : ID ou email do utilizador} {--type=system : reminder, system, study, chat, rag, success, warning ou error} {--force : Permite executar em producao}', function () {
     if (app()->isProduction() && ! $this->option('force')) {
         $this->error('Este comando cria notificacoes de teste. Usa --force para executar em producao.');
