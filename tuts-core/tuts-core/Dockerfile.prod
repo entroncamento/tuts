@@ -42,6 +42,8 @@ COPY . .
 COPY docker/php/conf.d/uploads.ini /usr/local/etc/php/conf.d/uploads.ini
 
 # PHP deps
+RUN composer config --global source-fallback true
+
 RUN composer install \
     --no-dev \
     --optimize-autoloader \
