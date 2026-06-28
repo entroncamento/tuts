@@ -131,10 +131,11 @@ class AdminRagController extends Controller
             $start = microtime(true);
             $response = Http::timeout(10)
                 ->withHeaders(['X-Internal-Token' => $internalToken])
+                ->asForm()
                 ->post($url, [
-                    'pergunta' => $validated['query'],
+                    'texto' => $validated['query'],
                     'uc' => $subject->name,
-                    'context_id' => (string) $subject->id,
+                    'subject_id' => (string) $subject->id,
                     'context_type' => 'uc',
                 ]);
 
@@ -150,8 +151,10 @@ class AdminRagController extends Controller
             return response()->json([
                 'status_code' => $response->status(),
                 'latency_ms' => $latency,
-                'response' => $response->json(),
-            ]);
+                'response' => str_contains((string) $response->header('Content-Type'), 'application/json')
+                    ? $response->json()
+                    : $response->body(),
+            ], $response->status());
         } catch (\Exception $e) {
             return response()->json([
                 'message' => 'Erro na resposta do serviço RAG.',
