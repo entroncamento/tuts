@@ -11,11 +11,16 @@ use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use RuntimeException;
 
 class DatabaseSeeder extends Seeder
 {
     public function run(): void
     {
+	 if (app()->environment('production')) {
+        	throw new RuntimeException('Seeders bloqueados em produção para proteger a base de dados.');
+    	}
+
         $this->command->info('🚜 A importar Cursos e Cadeiras dos teus JSONs...');
 
         $jsonCursos = File::get(database_path('data/cursos_ua.json'));
