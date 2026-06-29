@@ -6,13 +6,13 @@ use App\Http\Controllers\Controller;
 use App\Models\PersonalMaterial;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
-use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class PersonalMaterialController extends Controller
 {
@@ -177,47 +177,105 @@ class PersonalMaterialController extends Controller
         ], 201);
     }
 
-    public function view(PersonalMaterial $material): StreamedResponse|JsonResponse
+    public function view(PersonalMaterial $material): Response|JsonResponse
     {
-        $this->authorizeMaterial($material);
+        $userId = $this->userId();
 
-        Log::info('[TUTS][PersonalMaterials] view requested', [
-            'user_id' => $this->userId(),
-            'material_id' => $material->id,
-            'size_bytes' => $material->size_bytes,
-            'mime_type' => $material->mime_type,
-        ]);
-
-        $disk = Storage::disk($material->storage_disk);
-
-        try {
-            $stream = $disk->readStream($material->storage_key);
-        } catch (\Throwable) {
-            $stream = false;
+        if ((int) $material->owner_id !== $userId) {
+            return response()->json([
+                'message' => 'You do not have permission to view this material.',
+            ], 403);
         }
 
-        if ($stream === false) {
+        $rawPath = trim((string) $material->storage_key);
+
+        if ($rawPath === '') {
             return response()->json([
-                'message' => 'Material file not found.',
+                'message' => 'Material has no PDF path.',
+                'material_id' => $material->id,
             ], 404);
         }
 
-        $disposition = in_array(strtolower((string) $material->extension), self::INLINE_EXTENSIONS, true)
-            ? 'inline'
-            : 'attachment';
+        $path = Str::contains($rawPath, '/storage/')
+            ? Str::after($rawPath, '/storage/')
+            : ltrim($rawPath, '/');
+        $diskName = $material->storage_disk ?: 'public';
 
-        return response()->stream(function () use ($stream) {
-            fpassthru($stream);
+        try {
+            $disk = Storage::disk($diskName);
+            $exists = $disk->exists($path);
 
-            if (is_resource($stream)) {
-                fclose($stream);
+            Log::info('[TUTS][PersonalMaterials] preparing file response', [
+                'material_id' => $material->id,
+                'user_id' => $userId,
+                'disk' => $diskName,
+                'raw_path' => $rawPath,
+                'resolved_path' => $path,
+                'exists' => $exists,
+                'file_size' => $material->size_bytes ?: null,
+                'content_type' => $material->mime_type,
+            ]);
+
+            if (!$exists) {
+                return response()->json([
+                    'message' => 'PDF file not found.',
+                    'material_id' => $material->id,
+                    'path' => $path,
+                    'disk' => $diskName,
+                ], 404);
             }
-        }, 200, [
-            'Content-Type' => $material->mime_type ?: 'application/octet-stream',
-            'Content-Disposition' => $disposition . '; filename="' . addslashes($material->original_name) . '"',
-            'Content-Length' => (string) $material->size_bytes,
-            'X-Content-Type-Options' => 'nosniff',
-        ]);
+
+            $contents = $disk->get($path);
+
+            if ($contents === '') {
+                return response()->json([
+                    'message' => 'PDF file is empty or unreadable.',
+                    'material_id' => $material->id,
+                    'path' => $path,
+                    'disk' => $diskName,
+                ], 500);
+            }
+
+            $contentType = strtolower((string) $material->extension) === 'pdf'
+                ? 'application/pdf'
+                : ($material->mime_type ?: 'application/octet-stream');
+            $disposition = in_array(strtolower((string) $material->extension), self::INLINE_EXTENSIONS, true)
+                ? 'inline'
+                : 'attachment';
+            $filename = str_replace(['"', "\r", "\n"], '', basename($material->original_name ?: $path));
+
+            Log::info('[TUTS][PersonalMaterials] file loaded', [
+                'material_id' => $material->id,
+                'user_id' => $userId,
+                'disk' => $diskName,
+                'resolved_path' => $path,
+                'bytes_read' => strlen($contents),
+                'content_type' => $contentType,
+            ]);
+
+            return response($contents, 200, [
+                'Content-Type' => $contentType,
+                'Content-Disposition' => $disposition . '; filename="' . $filename . '"',
+                'Content-Length' => (string) strlen($contents),
+                'Cache-Control' => 'private, max-age=0, must-revalidate',
+                'X-Content-Type-Options' => 'nosniff',
+            ]);
+        } catch (\Throwable $exception) {
+            Log::error('[TUTS][PersonalMaterials] failed to load file', [
+                'material_id' => $material->id,
+                'user_id' => $userId,
+                'disk' => $diskName,
+                'raw_path' => $rawPath,
+                'resolved_path' => $path,
+                'content_type' => $material->mime_type,
+                'exception' => $exception::class,
+                'exception_message' => $exception->getMessage(),
+            ]);
+
+            return response()->json([
+                'message' => 'Failed to load PDF from storage.',
+            ], 500);
+        }
     }
 
     public function destroy(PersonalMaterial $material): JsonResponse
