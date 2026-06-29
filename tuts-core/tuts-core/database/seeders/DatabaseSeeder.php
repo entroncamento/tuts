@@ -104,6 +104,7 @@ class DatabaseSeeder extends Seeder
 
         $this->call(AdminBackofficeDemoSeeder::class);
         $this->call(TutsDemoAccountsSeeder::class);
+        $this->call(StudentDashboardDemoSeeder::class);
     }
 
     private function ensureSubjectUcMetadata(Subject $subject): void

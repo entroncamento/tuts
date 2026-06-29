@@ -16,7 +16,7 @@ class AdminBackofficeDemoSeeder extends Seeder
             ['email' => 'admin@ua.pt'],
             [
                 'name' => 'Administrador do Sistema',
-                'password' => Hash::make('password123'),
+                'password' => Hash::make('password'),
                 'role' => 'admin',
                 'email_verified_at' => now(),
             ]
@@ -26,14 +26,14 @@ class AdminBackofficeDemoSeeder extends Seeder
             ['email' => 'superadmin@ua.pt'],
             [
                 'name' => 'Super Administrador',
-                'password' => Hash::make('password123'),
+                'password' => Hash::make('password'),
                 'role' => 'super_admin',
                 'email_verified_at' => now(),
             ]
         );
 
         $this->command->info('✅ Utilizadores Admin criados com sucesso!');
-        $this->command->info('👨‍💻 Admin: admin@ua.pt / password123');
-        $this->command->info('👨‍💻 Super Admin: superadmin@ua.pt / password123');
+        $this->command->info('👨‍💻 Admin: admin@ua.pt / password');
+        $this->command->info('👨‍💻 Super Admin: superadmin@ua.pt / password');
     }
 }

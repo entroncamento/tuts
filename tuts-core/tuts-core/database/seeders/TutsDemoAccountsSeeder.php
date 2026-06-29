@@ -17,6 +17,7 @@ use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 
@@ -252,13 +253,21 @@ class TutsDemoAccountsSeeder extends Seeder
 
                 // Create materials
                 foreach ($mats as $matInfo) {
+                    $path = "materials/" . Str::slug($subject->acronym) . "/" . Str::slug($matInfo['name']) . "." . $matInfo['type'];
+                    $size = $matInfo['size'];
+                    
+                    if (!Storage::disk('local')->exists($path) || Storage::disk('local')->size($path) !== $size) {
+                        Storage::disk('local')->put($path, str_repeat(' ', $size));
+                    }
+
                     SubjectMaterial::updateOrCreate(
                         ['subject_id' => $subject->id, 'section_id' => $section->id, 'name' => $matInfo['name']],
                         [
                             'type' => $matInfo['type'],
                             'mime_type' => $matInfo['type'] === 'pdf' ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-                            'size_bytes' => $matInfo['size'],
-                            'path' => "materials/" . Str::slug($subject->acronym) . "/" . Str::slug($matInfo['name']) . "." . $matInfo['type'],
+                            'size_bytes' => $size,
+                            'disk' => 'local',
+                            'path' => $path,
                             'url' => "http://localhost:8000/storage/mock/" . Str::slug($matInfo['name']) . "." . $matInfo['type'],
                             'source' => 'official',
                             'verified_by_teacher' => true,
@@ -332,6 +341,11 @@ class TutsDemoAccountsSeeder extends Seeder
         $this->command->info('✅ Chats and student message analyses created for students.');
 
         // 9. Personal Materials
+        $personalPath1 = 'personal/resumos_scm_estudo.pdf';
+        if (!Storage::disk('local')->exists($personalPath1) || Storage::disk('local')->size($personalPath1) !== 1250300) {
+            Storage::disk('local')->put($personalPath1, str_repeat(' ', 1250300));
+        }
+
         PersonalMaterial::firstOrCreate(
             ['owner_id' => $students[0]->id, 'original_name' => 'Resumos_SCM_Estudo.pdf'],
             [
@@ -340,9 +354,14 @@ class TutsDemoAccountsSeeder extends Seeder
                 'extension' => 'pdf',
                 'size_bytes' => 1250300,
                 'storage_disk' => 'local',
-                'storage_key' => 'personal/resumos_scm_estudo.pdf'
+                'storage_key' => $personalPath1
             ]
         );
+
+        $personalPath2 = 'personal/apontamentos_bdtss_normalizacao.docx';
+        if (!Storage::disk('local')->exists($personalPath2) || Storage::disk('local')->size($personalPath2) !== 450000) {
+            Storage::disk('local')->put($personalPath2, str_repeat(' ', 450000));
+        }
 
         PersonalMaterial::firstOrCreate(
             ['owner_id' => $students[1]->id, 'original_name' => 'Apontamentos_BDTSS_Normalizacao.docx'],
@@ -352,7 +371,7 @@ class TutsDemoAccountsSeeder extends Seeder
                 'extension' => 'docx',
                 'size_bytes' => 450000,
                 'storage_disk' => 'local',
-                'storage_key' => 'personal/apontamentos_bdtss_normalizacao.docx'
+                'storage_key' => $personalPath2
             ]
         );
         $this->command->info('✅ Personal materials seeded for students.');
