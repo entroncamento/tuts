@@ -5,6 +5,61 @@ use App\Models\User;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Symfony\Component\Console\Command\Command;
+use Illuminate\Support\Facades\DB;
+
+Artisan::command('tuts:db-fingerprint {--label=manual}', function () {
+    $label = $this->option('label');
+
+    $this->info("[TUTS][DB-FINGERPRINT][{$label}] Starting");
+
+    try {
+        $default = config('database.default');
+        $connection = config("database.connections.{$default}", []);
+
+        $safeConfig = [
+            'default' => $default,
+            'host' => $connection['host'] ?? null,
+            'port' => $connection['port'] ?? null,
+            'database' => $connection['database'] ?? null,
+            'username' => $connection['username'] ?? null,
+        ];
+
+        $this->info('[TUTS][DB-FINGERPRINT]['.$label.'] config='.json_encode($safeConfig));
+
+        $dbInfo = DB::selectOne('select current_database() as database, current_schema() as schema, current_user as "user"');
+
+        $this->info('[TUTS][DB-FINGERPRINT]['.$label.'] current='.json_encode($dbInfo));
+
+        $tables = [
+            'migrations',
+            'users',
+            'courses',
+            'subjects',
+            'subject_user',
+            'subject_sections',
+            'subject_materials',
+            'chats',
+            'messages',
+            'student_message_analyses',
+        ];
+
+        foreach ($tables as $table) {
+            try {
+                $count = DB::table($table)->count();
+                $this->info("[TUTS][DB-FINGERPRINT][{$label}] {$table}={$count}");
+            } catch (\Throwable $e) {
+                $this->warn("[TUTS][DB-FINGERPRINT][{$label}] {$table}=ERROR ".$e->getMessage());
+            }
+        }
+    } catch (\Throwable $e) {
+        $this->error('[TUTS][DB-FINGERPRINT]['.$label.'] FAILED '.$e->getMessage());
+        return self::FAILURE;
+    }
+
+    $this->info("[TUTS][DB-FINGERPRINT][{$label}] Done");
+
+    return self::SUCCESS;
+})->purpose('Print safe DB connection fingerprint and row counts.');
 
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
