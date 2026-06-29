@@ -171,4 +171,105 @@ class SubjectOfficialContentControllerTest extends TestCase
             'message' => 'Failed to upload subject material.',
         ]);
     }
+
+    public function test_enrolled_student_can_view_subject_material_pdf(): void
+    {
+        Storage::fake('r2');
+        Storage::disk('r2')->put('subject-materials/test.pdf', '%PDF-subject-test');
+
+        $student = User::factory()->create(['role' => 'aluno']);
+        \Illuminate\Support\Facades\DB::table('subject_user')->insert([
+            'subject_id' => $this->subject->id,
+            'user_id' => $student->id,
+            'role' => 'student',
+            'status' => 'active',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $material = SubjectMaterial::create([
+            'subject_id' => $this->subject->id,
+            'name' => 'Test Material PDF',
+            'type' => 'pdf',
+            'mime_type' => 'application/pdf',
+            'size_bytes' => 17,
+            'path' => 'subject-materials/test.pdf',
+            'disk' => 'r2',
+            'source' => 'official',
+            'verified_by_teacher' => true,
+        ]);
+
+        $response = $this->actingAs($student)->get(
+            "/api/subjects/uc-{$this->subject->id}/materials/{$material->id}/view",
+            [
+                'Accept' => 'application/pdf',
+                'X-Requested-With' => 'XMLHttpRequest',
+            ]
+        );
+
+        $response->assertOk();
+        $response->assertHeader('Content-Type', 'application/pdf');
+        $response->assertHeader('Content-Disposition', 'inline; filename="Test Material PDF"');
+        $this->assertSame('%PDF-subject-test', $response->getContent());
+    }
+
+    public function test_non_enrolled_user_cannot_view_subject_material(): void
+    {
+        Storage::fake('r2');
+        Storage::disk('r2')->put('subject-materials/test.pdf', '%PDF-subject-test');
+
+        $otherStudent = User::factory()->create(['role' => 'aluno']);
+
+        $material = SubjectMaterial::create([
+            'subject_id' => $this->subject->id,
+            'name' => 'Test Material PDF',
+            'type' => 'pdf',
+            'mime_type' => 'application/pdf',
+            'size_bytes' => 17,
+            'path' => 'subject-materials/test.pdf',
+            'disk' => 'r2',
+            'source' => 'official',
+            'verified_by_teacher' => true,
+        ]);
+
+        $response = $this->actingAs($otherStudent)->getJson(
+            "/api/subjects/uc-{$this->subject->id}/materials/{$material->id}/view"
+        );
+
+        $response->assertStatus(403);
+    }
+
+    public function test_missing_subject_material_file_returns_404(): void
+    {
+        Storage::fake('r2');
+
+        $student = User::factory()->create(['role' => 'aluno']);
+        \Illuminate\Support\Facades\DB::table('subject_user')->insert([
+            'subject_id' => $this->subject->id,
+            'user_id' => $student->id,
+            'role' => 'student',
+            'status' => 'active',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $material = SubjectMaterial::create([
+            'subject_id' => $this->subject->id,
+            'name' => 'Missing PDF',
+            'type' => 'pdf',
+            'mime_type' => 'application/pdf',
+            'size_bytes' => 17,
+            'path' => 'subject-materials/missing.pdf',
+            'disk' => 'r2',
+            'source' => 'official',
+            'verified_by_teacher' => true,
+        ]);
+
+        $response = $this->actingAs($student)->getJson(
+            "/api/subjects/uc-{$this->subject->id}/materials/{$material->id}/view"
+        );
+
+        $response->assertStatus(404);
+    }
 }
+

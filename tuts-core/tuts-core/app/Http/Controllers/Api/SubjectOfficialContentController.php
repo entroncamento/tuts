@@ -543,24 +543,23 @@ class SubjectOfficialContentController extends Controller
         ]);
 
         try {
-            $stream = $disk->readStream($material->path);
-        } catch (\Throwable) {
-            $stream = false;
+            $contents = $disk->get($material->path);
+        } catch (\Throwable $e) {
+            Log::error('[TUTS][SubjectMaterials] serving file view failed to read content', [
+                'material_id' => $material->id,
+                'path' => $material->path,
+                'error' => $e->getMessage(),
+            ]);
+            $contents = null;
         }
 
-        if ($stream === false) {
+        if ($contents === null) {
             abort(404, 'Ficheiro nao encontrado.');
         }
 
-        return response()->stream(function () use ($stream) {
-            fpassthru($stream);
-            if (is_resource($stream)) {
-                fclose($stream);
-            }
-        }, 200, [
+        return response($contents, 200, [
             'Content-Type' => $material->mime_type ?: 'application/octet-stream',
             'Content-Disposition' => 'inline; filename="' . addslashes($material->name) . '"',
-            'Content-Length' => (string) $material->size_bytes,
             'X-Content-Type-Options' => 'nosniff',
         ]);
     }
@@ -774,7 +773,7 @@ class SubjectOfficialContentController extends Controller
             'size_bytes' => $material->size_bytes,
             'source' => $material->source,
             'verified_by_teacher' => $material->verified_by_teacher,
-            'url' => $material->url ?: $viewUrl,
+            'url' => (!empty($material->path)) ? $viewUrl : ($material->url ?: $viewUrl),
             'created_at' => $material->created_at?->toISOString(),
         ];
     }
