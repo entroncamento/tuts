@@ -73,6 +73,11 @@ Artisan::command('tuts:db-startup-guard', function () {
         'chats',
         'messages',
     ];
+    $requiredNonEmptyTables = [
+        'users',
+        'courses',
+        'subjects',
+    ];
 
     $logInfo = function (string $message) use ($prefix) {
         $line = "{$prefix} {$message}";
@@ -110,13 +115,28 @@ Artisan::command('tuts:db-startup-guard', function () {
                 return Command::FAILURE;
             }
         }
+
+        $tableCounts = [];
+
+        foreach ($requiredNonEmptyTables as $table) {
+            $tableCounts[$table] = DB::table($table)->count();
+
+            if ($tableCounts[$table] < 1) {
+                $logError("FAILED: {$table} table is empty");
+
+                return Command::FAILURE;
+            }
+        }
     } catch (\Throwable $e) {
         $logError('FAILED: '.$e->getMessage());
 
         return Command::FAILURE;
     }
 
-    $logInfo("OK: migrations={$migrationCount}; required tables present: ".implode(', ', $requiredTables));
+    $logInfo(
+        "OK: migrations={$migrationCount}; required tables present: ".implode(', ', $requiredTables)
+        .'; required counts: '.json_encode($tableCounts)
+    );
 
     return Command::SUCCESS;
 })->purpose('Fail startup if production DB schema looks wiped or incomplete.');
