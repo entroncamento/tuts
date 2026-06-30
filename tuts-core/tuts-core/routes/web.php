@@ -130,6 +130,7 @@ Route::middleware('auth')->group(function () {
         Route::get('/ucs', [ChatController::class, 'listarChatsPorUC']);
         Route::get('/{id}', [ChatController::class, 'obterHistorico']);
         Route::patch('/{chat}/retention', [ChatController::class, 'atualizarRetencao']);
+        Route::delete('/{chat}', [ChatController::class, 'destroy']);
         Route::post('/', [ChatController::class, 'criarChat'])->middleware('throttle:chat.create');
         Route::post('/stream', [ChatController::class, 'enviarPerguntaStream'])->middleware('throttle:chat.stream');
     });

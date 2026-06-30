@@ -1762,6 +1762,19 @@ class ChatController extends Controller
         return $this->listarChats($request);
     }
 
+    public function destroy(Chat $chat)
+    {
+        $userId = $this->requireAuthenticatedUserId();
+
+        abort_unless((int) $chat->user_id === $userId, 403, 'Não podes apagar uma conversa de outro utilizador.');
+
+        $chat->delete();
+
+        return response()->json([
+            'success' => true,
+        ]);
+    }
+
     private function formatChatListItem(Chat $chat): array
     {
         $lastMessage = $chat->messages->first();
