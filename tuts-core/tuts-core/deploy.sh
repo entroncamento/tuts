@@ -10,7 +10,7 @@ echo "🚀 Iniciando processo de deploy..."
 
 # 2. Correr migrações
 echo "📦 Correndo migrações..."
-php artisan migrate --force
+echo '[TUTS][Deploy] Skipping automatic migrations in production. Run migrations manually only after explicit approval.'
 
 # 3. Otimizações de Cache
 echo "⚡ Otimizando caches..."

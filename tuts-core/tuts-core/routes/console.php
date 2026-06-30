@@ -4,8 +4,10 @@ use App\Models\TutsNotification;
 use App\Models\User;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
-use Symfony\Component\Console\Command\Command;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
+use Symfony\Component\Console\Command\Command;
 
 Artisan::command('tuts:db-fingerprint {--label=manual}', function () {
     $label = $this->option('label');
@@ -60,6 +62,64 @@ Artisan::command('tuts:db-fingerprint {--label=manual}', function () {
 
     return self::SUCCESS;
 })->purpose('Print safe DB connection fingerprint and row counts.');
+
+Artisan::command('tuts:db-startup-guard', function () {
+    $prefix = '[TUTS][DB-GUARD]';
+    $requiredTables = [
+        'users',
+        'courses',
+        'subjects',
+        'subject_user',
+        'chats',
+        'messages',
+    ];
+
+    $logInfo = function (string $message) use ($prefix) {
+        $line = "{$prefix} {$message}";
+        $this->info($line);
+        Log::info($line);
+    };
+
+    $logError = function (string $message) use ($prefix) {
+        $line = "{$prefix} {$message}";
+        $this->error($line);
+        Log::error($line);
+    };
+
+    $logInfo('Starting read-only startup checks');
+
+    try {
+        if (! Schema::hasTable('migrations')) {
+            $logError('FAILED: missing migrations table');
+
+            return Command::FAILURE;
+        }
+
+        $migrationCount = DB::table('migrations')->count();
+
+        if ($migrationCount < 1) {
+            $logError('FAILED: migrations table has no records');
+
+            return Command::FAILURE;
+        }
+
+        foreach ($requiredTables as $table) {
+            if (! Schema::hasTable($table)) {
+                $logError("FAILED: missing required table {$table}");
+
+                return Command::FAILURE;
+            }
+        }
+    } catch (\Throwable $e) {
+        $logError('FAILED: '.$e->getMessage());
+
+        return Command::FAILURE;
+    }
+
+    $logInfo("OK: migrations={$migrationCount}; required tables present: ".implode(', ', $requiredTables));
+
+    return Command::SUCCESS;
+})->purpose('Fail startup if production DB schema looks wiped or incomplete.');
 
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
