@@ -6,12 +6,14 @@ use App\Http\Controllers\Controller;
 use App\Models\SpaceFolder;
 use App\Models\SpaceMaterial;
 use App\Models\StudySpace;
+use App\Services\RagIngestionService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
-use Symfony\Component\HttpFoundation\BinaryFileResponse;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class SpaceMaterialController extends Controller
 {
@@ -62,7 +64,7 @@ class SpaceMaterialController extends Controller
         ]);
     }
 
-    public function store(Request $request, StudySpace $space): JsonResponse
+    public function store(Request $request, StudySpace $space, RagIngestionService $ragIngestion): JsonResponse
     {
         $this->authorizeSpace($space);
 
@@ -83,29 +85,103 @@ class SpaceMaterialController extends Controller
         abort_unless(in_array($extension, self::ALLOWED_EXTENSIONS, true), 422, 'Tipo de ficheiro não permitido.');
 
         $userId = $this->userId();
-        $storedName = (string) Str::uuid() . ($extension ? '.' . $extension : '');
-        $directory = 'space-materials/' . $userId . '/' . $space->id;
-        $path = $file->storeAs($directory, $storedName, 'local');
+        $originalName = basename((string) $file->getClientOriginalName());
+        $safeFilename = $this->safeFilename($originalName, $extension);
+        $materialUuid = (string) Str::uuid();
+        $directory = 'space-materials/spaces/' . $space->id . '/materials/' . $materialUuid;
+        $path = $directory . '/' . $safeFilename;
+        $stored = false;
+        $material = null;
 
-        $material = SpaceMaterial::create([
-            'user_id' => $userId,
-            'study_space_id' => $space->id,
-            'space_folder_id' => $folderId,
-            'original_name' => basename((string) $file->getClientOriginalName()),
-            'stored_name' => $storedName,
-            'mime_type' => $file->getMimeType(),
-            'extension' => $extension,
-            'size_bytes' => $file->getSize() ?: 0,
-            'disk' => 'local',
-            'path' => $path,
-            'notes' => $validated['notes'] ?? null,
-        ]);
+        try {
+            $storedPath = Storage::disk('r2')->putFileAs($directory, $file, $safeFilename);
+
+            if (!$storedPath) {
+                throw new \RuntimeException('storage_write_failed');
+            }
+
+            $stored = true;
+            $path = $storedPath;
+
+            $material = SpaceMaterial::create([
+                'user_id' => $userId,
+                'study_space_id' => $space->id,
+                'space_folder_id' => $folderId,
+                'original_name' => $originalName,
+                'stored_name' => $safeFilename,
+                'mime_type' => $file->getMimeType(),
+                'extension' => $extension,
+                'size_bytes' => $file->getSize() ?: 0,
+                'disk' => 'r2',
+                'path' => $path,
+                'notes' => $validated['notes'] ?? null,
+            ]);
+        } catch (\Throwable $exception) {
+            try {
+                if ($stored && Storage::disk('r2')->exists($path)) {
+                    Storage::disk('r2')->delete($path);
+                }
+            } catch (\Throwable) {
+                // Best-effort cleanup; the upload failure remains the response driver.
+            }
+
+            Log::error('[TUTS][SpaceMaterials][Storage] upload failed', [
+                'user_id' => $userId,
+                'space_id' => $space->id,
+                'folder_id' => $folderId,
+                'disk' => 'r2',
+                'target_path' => $path,
+                'mime_type' => $file->getMimeType(),
+                'size_bytes' => $file->getSize() ?: 0,
+                'exception_class' => $exception::class,
+                'exception_message' => $exception->getMessage(),
+            ]);
+
+            return response()->json([
+                'message' => 'Failed to upload space material.',
+            ], 500);
+        }
 
         $space->touch();
+
+        $ragResult = $this->ragSkipped();
+
+        if ($this->isPdfMaterial($material)) {
+            Log::info('[TUTS][Space Materials] RAG ingestion attempted', [
+                'user_id' => $userId,
+                'space_id' => $space->id,
+                'folder_id' => $material->space_folder_id,
+                'material_id' => $material->id,
+                'mime_type' => $material->mime_type,
+                'size_bytes' => $material->size_bytes,
+            ]);
+
+            try {
+                $ragResult = $ragIngestion->ingestSpaceMaterial($material->load('studySpace'));
+            } catch (\Throwable $exception) {
+                Log::error('[TUTS][SpaceMaterials][RAG] Ingestion crashed during upload', [
+                    'material_id' => $material->id,
+                    'space_id' => $space->id,
+                    'exception_class' => $exception::class,
+                    'exception_message' => $exception->getMessage(),
+                ]);
+
+                $ragResult = [
+                    'status' => 'failed',
+                    'message' => 'Material guardado, mas ocorreu um erro ao comunicar com o RAG.',
+                    'reason' => 'ingestion_crash',
+                ];
+            }
+        }
 
         return response()->json([
             'status' => 'sucesso',
             'material' => $this->formatMaterial($space, $material->load('folder')),
+            'rag_ingestion' => [
+                'status' => $ragResult['status'] ?? 'failed',
+                'message' => $ragResult['message'] ?? 'Material guardado, mas ainda nao ficou pesquisavel pelo RAG.',
+                'reason' => $ragResult['reason'] ?? null,
+            ],
         ], 201);
     }
 
@@ -131,32 +207,44 @@ class SpaceMaterialController extends Controller
         ]);
     }
 
-    public function download(StudySpace $space, SpaceMaterial $material): BinaryFileResponse
+    public function download(StudySpace $space, SpaceMaterial $material): StreamedResponse
     {
         $this->authorizeMaterial($space, $material);
 
-        $absolutePath = Storage::disk($material->disk)->path($material->path);
-        abort_unless(file_exists($absolutePath), 404, 'Ficheiro não encontrado.');
+        $stream = $this->openMaterialStream($material);
 
-        return response()->download($absolutePath, $material->original_name, [
+        return response()->streamDownload(function () use ($stream) {
+            fpassthru($stream);
+
+            if (is_resource($stream)) {
+                fclose($stream);
+            }
+        }, $material->original_name, [
             'Content-Type' => $material->mime_type ?: 'application/octet-stream',
+            'Content-Length' => (string) $material->size_bytes,
             'X-Content-Type-Options' => 'nosniff',
         ]);
     }
 
-    public function view(StudySpace $space, SpaceMaterial $material): BinaryFileResponse
+    public function view(StudySpace $space, SpaceMaterial $material): StreamedResponse
     {
         $this->authorizeMaterial($space, $material);
 
         $inlineExtensions = ['pdf', 'png', 'jpg', 'jpeg', 'webp', 'txt', 'md', 'csv'];
         abort_unless(in_array(strtolower((string) $material->extension), $inlineExtensions, true), 415);
 
-        $absolutePath = Storage::disk($material->disk)->path($material->path);
-        abort_unless(file_exists($absolutePath), 404, 'Ficheiro não encontrado.');
+        $stream = $this->openMaterialStream($material);
 
-        return response()->file($absolutePath, [
+        return response()->stream(function () use ($stream) {
+            fpassthru($stream);
+
+            if (is_resource($stream)) {
+                fclose($stream);
+            }
+        }, 200, [
             'Content-Type' => $material->mime_type ?: 'application/octet-stream',
             'Content-Disposition' => 'inline; filename="' . addslashes($material->original_name) . '"',
+            'Content-Length' => (string) $material->size_bytes,
             'X-Content-Type-Options' => 'nosniff',
         ]);
     }
@@ -219,6 +307,62 @@ class SpaceMaterialController extends Controller
             'created_at' => $material->created_at?->toISOString(),
             'updated_at' => $material->updated_at?->toISOString(),
         ];
+    }
+
+    private function openMaterialStream(SpaceMaterial $material)
+    {
+        $path = trim((string) $material->path);
+        abort_unless($path !== '', 404, 'Ficheiro não encontrado.');
+
+        $diskName = $material->disk ?: 'local';
+        $disk = Storage::disk($diskName);
+
+        try {
+            abort_unless($disk->exists($path), 404, 'Ficheiro não encontrado.');
+
+            $stream = $disk->readStream($path);
+        } catch (\Throwable $exception) {
+            Log::warning('[TUTS][SpaceMaterials] failed to open material stream', [
+                'material_id' => $material->id,
+                'space_id' => $material->study_space_id,
+                'disk' => $diskName,
+                'exception_class' => $exception::class,
+            ]);
+
+            abort(404, 'Ficheiro não encontrado.');
+        }
+
+        abort_unless(is_resource($stream), 404, 'Ficheiro não encontrado.');
+
+        return $stream;
+    }
+
+    private function isPdfMaterial(SpaceMaterial $material): bool
+    {
+        return strtolower((string) $material->mime_type) === 'application/pdf'
+            || strtolower((string) $material->extension) === 'pdf'
+            || strtolower((string) pathinfo((string) $material->path, PATHINFO_EXTENSION)) === 'pdf';
+    }
+
+    private function ragSkipped(): array
+    {
+        return [
+            'status' => 'skipped',
+            'message' => 'Apenas PDFs sao indexados pelo RAG nesta fase.',
+            'reason' => 'unsupported_type',
+        ];
+    }
+
+    private function safeFilename(string $filename, string $extension): string
+    {
+        $name = pathinfo($filename, PATHINFO_FILENAME);
+        $safeName = Str::slug(Str::ascii($name), '-');
+
+        if ($safeName === '') {
+            $safeName = 'material';
+        }
+
+        return $extension !== '' ? $safeName . '.' . $extension : $safeName;
     }
 
     private function humanSize(int $bytes): string

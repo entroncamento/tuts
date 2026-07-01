@@ -2,8 +2,8 @@
 
 namespace App\Services;
 
+use App\Models\SpaceMaterial;
 use App\Models\SubjectMaterial;
-use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
@@ -110,6 +110,112 @@ class RagIngestionService
         return $this->failed($material, 'rag_http_error', $response->status());
     }
 
+    public function ingestSpaceMaterial(SpaceMaterial $material): array
+    {
+        $material->loadMissing('studySpace');
+
+        Log::info('[TUTS][RAG Ingestion] preparing space material ingestion', [
+            'space_id' => $material->study_space_id,
+            'folder_id' => $material->space_folder_id,
+            'material_id' => $material->id,
+            'mime_type' => $material->mime_type,
+            'size_bytes' => $material->size_bytes,
+        ]);
+
+        if (!$material->studySpace) {
+            return $this->failedSpace($material, 'missing_space');
+        }
+
+        if (!$this->isSpacePdf($material)) {
+            return $this->failedSpace($material, 'unsupported_type');
+        }
+
+        $baseUrl = rtrim((string) config('services.rag.base_url', ''), '/');
+        $internalToken = trim((string) config('services.rag.internal_token', ''));
+
+        if ($baseUrl === '' || $internalToken === '') {
+            return $this->failedSpace($material, 'rag_not_configured');
+        }
+
+        $file = $this->openReadableMaterialFile($material);
+
+        if (!$file) {
+            return $this->failedSpace($material, 'file_not_readable');
+        }
+
+        [$stream, $filename, $mimeType] = $file;
+        $filename = $material->id . '-' . $filename;
+        $spaceLabel = trim((string) $material->studySpace->name);
+        $spaceContextName = 'Espaço: ' . ($spaceLabel !== '' ? $spaceLabel : $material->study_space_id);
+        $folderId = $material->space_folder_id ? (string) $material->space_folder_id : '';
+
+        Log::info('[TUTS][RAG Ingestion] sending space material to RAG', [
+            'space_id' => $material->study_space_id,
+            'folder_id' => $material->space_folder_id,
+            'material_id' => $material->id,
+            'mime_type' => $mimeType,
+            'size_bytes' => $material->size_bytes,
+        ]);
+
+        try {
+            $response = Http::timeout(120)
+                ->connectTimeout(15)
+                ->withHeaders([
+                    'X-Internal-Token' => $internalToken,
+                ])
+                ->attach('files', $stream, $filename, [
+                    'Content-Type' => $mimeType,
+                ])
+                ->post($baseUrl . '/ingestao', [
+                    'uc' => $spaceContextName,
+                    'context_id' => (string) $material->study_space_id,
+                    'context_type' => 'space',
+                    'space_id' => (string) $material->study_space_id,
+                    'folder_id' => $folderId,
+                    'space_folder_id' => $folderId,
+                    'material_id' => (string) $material->id,
+                    'materialId' => (string) $material->id,
+                    'source' => 'space',
+                    'verified' => 'true',
+                    'storage_key' => (string) $material->path,
+                    'file_path' => (string) $material->path,
+                ]);
+        } catch (\Throwable $e) {
+            Log::warning('[TUTS][RAG Ingestion] HTTP request failed for space material', [
+                'material_id' => $material->id,
+                'space_id' => $material->study_space_id,
+                'folder_id' => $material->space_folder_id,
+                'error_message' => $e->getMessage(),
+                'exception_class' => get_class($e),
+            ]);
+            return $this->failedSpace($material, 'rag_request_failed');
+        } finally {
+            if (is_resource($stream)) {
+                fclose($stream);
+            }
+        }
+
+        if ($response->successful()) {
+            Log::info('[TUTS][RAG Ingestion] space material ingestion succeeded', [
+                'space_id' => $material->study_space_id,
+                'folder_id' => $material->space_folder_id,
+                'material_id' => $material->id,
+                'mime_type' => $mimeType,
+                'size_bytes' => $material->size_bytes,
+                'status_code' => $response->status(),
+            ]);
+
+            return [
+                'status' => 'success',
+                'message' => 'Material enviado para indexacao RAG.',
+                'http_status' => $response->status(),
+                'response' => is_array($response->json()) ? $response->json() : null,
+            ];
+        }
+
+        return $this->failedSpace($material, 'rag_http_error', $response->status());
+    }
+
     private function isPdf(SubjectMaterial $material): bool
     {
         $mimeType = strtolower((string) $material->mime_type);
@@ -119,7 +225,15 @@ class RagIngestionService
         return $mimeType === 'application/pdf' || $extension === 'pdf' || $type === 'pdf';
     }
 
-    private function openReadableMaterialFile(SubjectMaterial $material): ?array
+    private function isSpacePdf(SpaceMaterial $material): bool
+    {
+        $mimeType = strtolower((string) $material->mime_type);
+        $extension = strtolower((string) ($material->extension ?: pathinfo((string) $material->path, PATHINFO_EXTENSION)));
+
+        return $mimeType === 'application/pdf' || $extension === 'pdf';
+    }
+
+    private function openReadableMaterialFile(SubjectMaterial|SpaceMaterial $material): ?array
     {
         $path = trim((string) $material->path);
 
@@ -163,13 +277,14 @@ class RagIngestionService
         }
 
         return $this->openSafeLocalPath($path, $material)
+            ?? $this->openSafeLocalPath(storage_path('app/private/' . ltrim($path, '/')), $material)
             ?? $this->openSafeLocalPath(storage_path('app/public/' . ltrim($path, '/')), $material)
             ?? $this->openSafeLocalPath(storage_path('app/' . ltrim($path, '/')), $material)
             ?? $this->openSafeLocalPath(storage_path('app/public/pdfs/' . basename($path)), $material)
             ?? $this->openSafeLocalPath(storage_path('app/pdfs/' . basename($path)), $material);
     }
 
-    private function openSafeLocalPath(string $path, SubjectMaterial $material): ?array
+    private function openSafeLocalPath(string $path, SubjectMaterial|SpaceMaterial $material): ?array
     {
         $realPath = realpath($path);
 
@@ -179,6 +294,7 @@ class RagIngestionService
 
         $allowedRoots = array_filter([
             realpath(storage_path('app')),
+            realpath(storage_path('app/private')),
             realpath(storage_path('app/public')),
             realpath(public_path('storage')),
         ]);
@@ -202,6 +318,26 @@ class RagIngestionService
             'subject_id' => $material->subject_id,
             'material_id' => $material->id,
             'section_id' => $material->section_id,
+            'mime_type' => $material->mime_type,
+            'size_bytes' => $material->size_bytes,
+            'status_code' => $statusCode,
+            'error_category' => $reason,
+        ]);
+
+        return [
+            'status' => 'failed',
+            'message' => 'Material guardado, mas ainda nao ficou pesquisavel pelo RAG.',
+            'reason' => $reason,
+            'http_status' => $statusCode,
+        ];
+    }
+
+    private function failedSpace(SpaceMaterial $material, string $reason, ?int $statusCode = null): array
+    {
+        Log::warning('[TUTS][RAG Ingestion] space material ingestion failed', [
+            'space_id' => $material->study_space_id,
+            'folder_id' => $material->space_folder_id,
+            'material_id' => $material->id,
             'mime_type' => $material->mime_type,
             'size_bytes' => $material->size_bytes,
             'status_code' => $statusCode,
