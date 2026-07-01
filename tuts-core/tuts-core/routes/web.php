@@ -207,25 +207,117 @@ Route::middleware('auth')->group(function () {
     });
 
     Route::get('/pdfs/{filename}', function (string $filename) {
+        // Bloqueio preventivo de Path Traversal
+        if (
+            str_contains($filename, '..') ||
+            str_contains($filename, '/') ||
+            str_contains($filename, '\\') ||
+            str_contains(urldecode($filename), '..') ||
+            str_contains(urldecode($filename), '/') ||
+            str_contains(urldecode($filename), '\\')
+        ) {
+            abort(400, 'Nome de ficheiro inválido.');
+        }
+
         $safeFilename = basename($filename);
 
-        $possiblePaths = [
-            storage_path('app/public/pdfs/' . $safeFilename),
-            storage_path('app/pdfs/' . $safeFilename),
-            public_path('storage/pdfs/' . $safeFilename),
-        ];
+        // 1. Resolve o material a partir da base de dados (ID, UUID ou sufixo)
+        $materialId = null;
+        if (preg_match('/^(?:.*_)?(\d+)(?:-|\.pdf)/i', $safeFilename, $matches)) {
+            $materialId = (int) $matches[1];
+        }
 
-        $path = collect($possiblePaths)->first(function ($possiblePath) {
-            return file_exists($possiblePath) && is_file($possiblePath);
-        });
+        $material = null;
+        if ($materialId) {
+            $material = \App\Models\SubjectMaterial::with('subject')->find($materialId);
+        }
 
-        abort_unless($path, 404);
+        if (!$material) {
+            if (preg_match('/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i', $safeFilename, $matches)) {
+                $uuid = $matches[1];
+                $material = \App\Models\SubjectMaterial::with('subject')->where('path', 'like', '%' . $uuid . '%')->first();
+            }
+        }
 
-        return response()->file($path, [
-            'Content-Type' => 'application/pdf',
-            'Content-Disposition' => 'inline; filename="' . $safeFilename . '"',
-            'X-Content-Type-Options' => 'nosniff',
-        ]);
+        if (!$material) {
+            $material = \App\Models\SubjectMaterial::with('subject')->where('path', 'like', '%' . $safeFilename)->first();
+        }
+
+        // 2. Se o material existe na base de dados, valida OBRIGATORIAMENTE as permissões antes de servir
+        if ($material) {
+            $user = auth()->user();
+            if (!$user) {
+                abort(401);
+            }
+
+            $subject = $material->subject;
+            if (!$subject) {
+                abort(404, 'UC associada não encontrada.');
+            }
+
+            // Permissão de Professor ou Admin
+            $canTeach = $user->role === 'admin' || $subject->teachers()->where('users.id', $user->id)->exists();
+
+            // Permissão de Aluno (inscrito na UC via curso)
+            $canView = $canTeach || $user->courses()
+                ->whereHas('subjects', function ($query) use ($subject) {
+                    $query->where('subjects.id', $subject->id);
+                })
+                ->exists();
+
+            abort_unless($canView, 403, 'Acesso negado a este material.');
+
+            // 3. Tenta servir do local em cache se existir
+            $possiblePaths = [
+                storage_path('app/public/pdfs/' . $safeFilename),
+                storage_path('app/pdfs/' . $safeFilename),
+                public_path('storage/pdfs/' . $safeFilename),
+            ];
+
+            $localPath = collect($possiblePaths)->first(function ($possiblePath) {
+                return file_exists($possiblePath) && is_file($possiblePath);
+            });
+
+            if ($localPath) {
+                return response()->file($localPath, [
+                    'Content-Type' => 'application/pdf',
+                    'Content-Disposition' => 'inline; filename="' . addslashes($material->name) . '"',
+                    'X-Content-Type-Options' => 'nosniff',
+                ]);
+            }
+
+            // 4. Se não existe localmente, serve via Cloudflare R2
+            $diskName = $material->disk ?: 'r2';
+            $disk = \Illuminate\Support\Facades\Storage::disk($diskName);
+            if ($disk->exists($material->path)) {
+                $contents = $disk->get($material->path);
+                return response($contents, 200, [
+                    'Content-Type' => $material->mime_type ?: 'application/pdf',
+                    'Content-Disposition' => 'inline; filename="' . addslashes($material->name) . '"',
+                    'X-Content-Type-Options' => 'nosniff',
+                ]);
+            }
+
+            abort(404, 'Ficheiro não encontrado no storage.');
+        }
+
+        // 5. Fallback restrito apenas para ficheiros de sistema explicitamente whitelisted
+        $systemWhitelist = ['termos.pdf', 'ajuda.pdf', 'regulamento.pdf', 'faq.pdf'];
+        $isSystemFile = in_array(strtolower($safeFilename), $systemWhitelist, true);
+
+        if ($isSystemFile) {
+            $systemPath = storage_path('app/system-pdfs/' . $safeFilename);
+            if (file_exists($systemPath) && is_file($systemPath)) {
+                return response()->file($systemPath, [
+                    'Content-Type' => 'application/pdf',
+                    'Content-Disposition' => 'inline; filename="' . $safeFilename . '"',
+                    'X-Content-Type-Options' => 'nosniff',
+                ]);
+            }
+        }
+
+        // Se parece material, mas não resolveu na base de dados, bloqueia qualquer local cache fallback
+        abort(404, 'Ficheiro não encontrado ou acesso não autorizado.');
     })->where('filename', '.*')->name('pdfs.show');
 
     Route::get('/{any}', function () {

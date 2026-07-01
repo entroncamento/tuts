@@ -1483,6 +1483,7 @@ class ChatController extends Controller
             $buffer = '';
             $fullAiText = '';
             $rawRagBody = '';
+            $ragSources = [];
             $lastHeartbeat = microtime(true);
 
             $ch = curl_init($urlPython);
@@ -1500,7 +1501,7 @@ class ChatController extends Controller
                 CURLOPT_CONNECTTIMEOUT => 15,
                 CURLOPT_TIMEOUT => 120, // Aumentado para streams longos
 
-                CURLOPT_WRITEFUNCTION => function ($curl, $chunk) use (&$buffer, &$fullAiText, &$rawRagBody, &$lastHeartbeat, $contextType, $chatId, $userMessageId, $subject, $section, &$retrievalPlan, &$hasLoggedDelta) {
+                CURLOPT_WRITEFUNCTION => function ($curl, $chunk) use (&$buffer, &$fullAiText, &$rawRagBody, &$lastHeartbeat, $contextType, $chatId, $userMessageId, $subject, $section, &$retrievalPlan, &$hasLoggedDelta, &$ragSources) {
                     if (connection_aborted()) {
                         return 0; // Para o cURL se o cliente desconectar
                     }
@@ -1537,23 +1538,28 @@ class ChatController extends Controller
 
                         $decoded = json_decode($payload, true);
 
-                        if (is_array($decoded) && isset($decoded['chunk'])) {
-                            if (strlen($fullAiText) < 20000) {
-                                $fullAiText .= $decoded['chunk'];
+                        if (is_array($decoded)) {
+                            if (isset($decoded['chunk'])) {
+                                if (strlen($fullAiText) < 20000) {
+                                    $fullAiText .= $decoded['chunk'];
+                                }
+                                if (!$hasLoggedDelta) {
+                                    $hasLoggedDelta = true;
+                                    Log::info('[TUTS][TemporaryChat] SSE emitted delta', [
+                                        'context_type' => $contextType,
+                                        'chat_id' => $chatId,
+                                        'message_id' => $userMessageId,
+                                        'subject_id_presence' => $subject !== null,
+                                        'section_id_presence' => $section !== null,
+                                        'retrieval_plan_base_context_type' => $retrievalPlan['base_context']['type'] ?? null,
+                                        'active_material_count' => count($retrievalPlan['active_materials'] ?? []),
+                                        'whether_rag_was_called' => true,
+                                        'sse_event' => 'delta',
+                                    ]);
+                                }
                             }
-                            if (!$hasLoggedDelta) {
-                                $hasLoggedDelta = true;
-                                Log::info('[TUTS][TemporaryChat] SSE emitted delta', [
-                                    'context_type' => $contextType,
-                                    'chat_id' => $chatId,
-                                    'message_id' => $userMessageId,
-                                    'subject_id_presence' => $subject !== null,
-                                    'section_id_presence' => $section !== null,
-                                    'retrieval_plan_base_context_type' => $retrievalPlan['base_context']['type'] ?? null,
-                                    'active_material_count' => count($retrievalPlan['active_materials'] ?? []),
-                                    'whether_rag_was_called' => true,
-                                    'sse_event' => 'delta',
-                                ]);
+                            if (isset($decoded['sources']) && is_array($decoded['sources'])) {
+                                $ragSources = $decoded['sources'];
                             }
                         }
 
@@ -1631,7 +1637,7 @@ class ChatController extends Controller
                 !empty(trim($fullAiText)) &&
                 !$this->looksLikeTechnicalError($fullAiText)
             ) {
-                DB::transaction(function () use ($chat, $chatId, $fullAiText, $contextType, $subject, $section, $requestId) {
+                DB::transaction(function () use ($chat, $chatId, $fullAiText, $contextType, $subject, $section, $requestId, $ragSources) {
                     Message::create([
                         'chat_id' => $chatId,
                         'role' => 'ai',
@@ -1646,7 +1652,7 @@ class ChatController extends Controller
                             ],
                             'rag' => [
                                 'request_id' => $requestId,
-                                'sources' => [],
+                                'sources' => $ragSources,
                                 'citations' => [],
                             ],
                         ],

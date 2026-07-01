@@ -42,7 +42,7 @@ def _validar_pdf(caminho_pdf: str) -> None:
     except Exception as e:
         raise ValueError(f"Ficheiro PDF malformado ou corrompido: {e}")
 
-def build_index(temp_path: str, filename: str, uc: str, chunk_size: int, chunk_overlap: int) -> tuple[int, list]:
+def build_index(temp_path: str, filename: str, uc: str, chunk_size: int, chunk_overlap: int, metadata: dict | None = None) -> tuple[int, list]:
     t0_total = time.perf_counter()
     clean_filename = os.path.basename(filename)
 
@@ -142,10 +142,12 @@ def build_index(temp_path: str, filename: str, uc: str, chunk_size: int, chunk_o
         logger.info("[BUILD_INDEX][%s] ⚠️ OCR IGNORADO (USAR_OCR=False ou motor desligado). A saltar diretamente para o Chunking...", clean_filename)
 
 
-    # 3) Cabeçalhos para citação
+    # 3) Cabeçalhos para citação e metadados extra
     for doc in documentos:
         pagina_humana = doc.metadata.get("page", 0) + 1
         doc.page_content = f"[CABEÇALHO FONTE: {clean_filename}:{pagina_humana}]\n{doc.page_content}"
+        if metadata:
+            doc.metadata.update(metadata)
 
     # 4) Chunking
     text_splitter = RecursiveCharacterTextSplitter(

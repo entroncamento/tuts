@@ -145,6 +145,15 @@ async def ingestao(
     chunk_size: int = Form(1200),
     chunk_overlap: int = Form(250),
     files: list[UploadFile] = File(...),
+    context_id: str | None = Form(None),
+    context_type: str | None = Form(None),
+    material_id: str | None = Form(None),
+    materialId: str | None = Form(None),
+    section_id: str | None = Form(None),
+    source: str | None = Form(None),
+    verified: str | None = Form(None),
+    storage_key: str | None = Form(None),
+    file_path: str | None = Form(None),
 ):
     t0_total = time.perf_counter()
 
@@ -224,6 +233,18 @@ async def ingestao(
                 # Copia para o storage final e usa o temp para a indexação
                 shutil.copy(temp_path, caminho_laravel)
 
+                metadata_dict = {
+                    "context_id": context_id,
+                    "context_type": context_type,
+                    "material_id": material_id or materialId,
+                    "materialId": materialId or material_id,
+                    "section_id": section_id,
+                    "source": source,
+                    "verified": verified,
+                    "storage_key": storage_key or file_path,
+                    "file_path": file_path or storage_key,
+                }
+
                 total_chunks, _ = await loop.run_in_executor(
                     executor,
                     build_index,
@@ -232,6 +253,7 @@ async def ingestao(
                     uc_limpa,
                     chunk_size,
                     chunk_overlap,
+                    metadata_dict,
                 )
 
                 resultados.append({"ficheiro": clean_filename, "status": "sucesso", "chunks": total_chunks})

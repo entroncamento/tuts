@@ -772,6 +772,33 @@ async def perguntar(
             if propostas_calendario:
                 yield sse({"calendario": propostas_calendario})
 
+        # Extrair e enviar fontes únicas no SSE
+        import os
+        import re
+        fontes_unicas = {}
+        for doc in (docs_hibridos or []):
+            meta = doc.metadata or {}
+            fname = meta.get("filename") or meta.get("source") or ""
+            fname = os.path.basename(str(fname))
+            mat_id = meta.get("material_id") or meta.get("materialId")
+            if not mat_id:
+                m = re.search(r'^(?:.*_)?(\d+)(?:-|\.pdf)', fname, re.IGNORECASE)
+                if m:
+                    mat_id = m.group(1)
+
+            if mat_id and mat_id not in fontes_unicas:
+                fontes_unicas[mat_id] = {
+                    "material_id": str(mat_id),
+                    "materialId": str(mat_id),
+                    "filename": fname,
+                    "storage_key": meta.get("storage_key") or meta.get("file_path") or "",
+                    "file_path": meta.get("file_path") or meta.get("storage_key") or "",
+                    "context_id": meta.get("context_id") or "",
+                    "context_type": meta.get("context_type") or "uc",
+                }
+
+        yield sse({"sources": list(fontes_unicas.values())})
+
         yield "data: [DONE]\n\n"
 
         if houve_erro:

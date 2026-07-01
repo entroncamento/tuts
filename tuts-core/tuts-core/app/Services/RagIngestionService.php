@@ -44,6 +44,7 @@ class RagIngestionService
         }
 
         [$stream, $filename, $mimeType] = $file;
+        $filename = $material->id . '-' . $filename;
 
         Log::info('[TUTS][RAG Ingestion] sending subject material to RAG', [
             'subject_id' => $material->subject_id,
@@ -67,9 +68,12 @@ class RagIngestionService
                     'context_id' => (string) $material->subject_id,
                     'context_type' => 'uc',
                     'material_id' => (string) $material->id,
+                    'materialId' => (string) $material->id,
                     'section_id' => $material->section_id ? (string) $material->section_id : '',
                     'source' => $material->source ?: 'official',
                     'verified' => $material->verified_by_teacher ? 'true' : 'false',
+                    'storage_key' => (string) $material->path,
+                    'file_path' => (string) $material->path,
                 ]);
         } catch (\Throwable $e) {
             Log::warning('[TUTS][RAG Ingestion] HTTP request failed', [
