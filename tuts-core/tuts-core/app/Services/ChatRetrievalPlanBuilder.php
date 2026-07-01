@@ -73,6 +73,7 @@ class ChatRetrievalPlanBuilder
             'base_subject_id' => $baseContext['subject_id'],
             'base_section_id' => $baseContext['section_id'],
             'base_space_id' => $baseContext['space_id'],
+            'base_folder_id' => $baseContext['folder_id'] ?? null,
             'active_material_count' => count($activeMaterials),
             'skipped_count' => $skippedCount,
         ]);
@@ -100,6 +101,7 @@ class ChatRetrievalPlanBuilder
                 'subject_id' => null,
                 'section_id' => null,
                 'space_id' => $chat->study_space_id ? (int) $chat->study_space_id : null,
+                'folder_id' => $chat->space_folder_id ? (int) $chat->space_folder_id : null,
             ];
         }
 

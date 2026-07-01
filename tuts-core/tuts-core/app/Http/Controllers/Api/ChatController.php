@@ -452,6 +452,55 @@ class ChatController extends Controller
         ];
     }
 
+    private function buildSpaceMaterialScope(?StudySpace $space, ?SpaceFolder $folder, int $userId): array
+    {
+        if (!$space) {
+            return [[], []];
+        }
+
+        $query = SpaceMaterial::query()
+            ->where('study_space_id', $space->id)
+            ->where('user_id', $userId)
+            ->orderBy('id');
+
+        if ($folder) {
+            $query->where(function ($q) use ($folder) {
+                $q->where('space_folder_id', $folder->id)
+                    ->orWhereNull('space_folder_id');
+            });
+        }
+
+        $materials = $query->get([
+            'id',
+            'study_space_id',
+            'space_folder_id',
+            'original_name',
+            'mime_type',
+            'extension',
+            'size_bytes',
+        ]);
+
+        $scopeMaterials = $materials
+            ->map(fn (SpaceMaterial $material) => [
+                'id' => (int) $material->id,
+                'title' => (string) $material->original_name,
+                'filename' => (string) $material->original_name,
+                'space_id' => (int) $material->study_space_id,
+                'folder_id' => $material->space_folder_id ? (int) $material->space_folder_id : null,
+                'source' => 'space',
+                'mime_type' => $material->mime_type,
+                'extension' => $material->extension,
+                'size_bytes' => (int) $material->size_bytes,
+            ])
+            ->values()
+            ->all();
+
+        return [
+            $materials->pluck('id')->map(fn ($id) => (int) $id)->values()->all(),
+            $scopeMaterials,
+        ];
+    }
+
     private function preparePersonalFilesForRag(array $attachedMaterialRefs, int $userId, int $chatId, int $messageId): array
     {
         $personalRefs = collect($attachedMaterialRefs)
@@ -698,7 +747,9 @@ class ChatController extends Controller
         array $subjectMaterialIds,
         array $spaceMaterialIds,
         array $scopeSubjectMaterialIds,
-        array $scopeMaterials
+        array $scopeMaterials,
+        ?SpaceFolder $folder = null,
+        array $scopeSpaceMaterialIds = []
     ): array {
         $postFields = [
             'texto' => $texto,
@@ -709,10 +760,13 @@ class ChatController extends Controller
             'message_id' => $userMessageId,
             'subject_id' => $subject?->id,
             'section_id' => $section?->id,
+            'space_id' => $space?->id,
+            'folder_id' => $folder?->id,
             'attached_material_refs' => json_encode($attachedMaterialRefs, JSON_UNESCAPED_UNICODE),
             'personal_material_ids' => json_encode($personalMaterialIds, JSON_UNESCAPED_UNICODE),
             'subject_material_ids' => json_encode($subjectMaterialIds, JSON_UNESCAPED_UNICODE),
             'space_material_ids' => json_encode($spaceMaterialIds, JSON_UNESCAPED_UNICODE),
+            'scope_space_material_ids' => json_encode($scopeSpaceMaterialIds, JSON_UNESCAPED_UNICODE),
             'scope_subject_material_ids' => json_encode($scopeSubjectMaterialIds, JSON_UNESCAPED_UNICODE),
             'scope_materials' => json_encode($scopeMaterials, JSON_UNESCAPED_UNICODE),
             'context_type' => $contextType,
@@ -749,6 +803,7 @@ class ChatController extends Controller
                     'subject_id' => $baseCtx['subject_id'] ?? null,
                     'section_id' => $baseCtx['section_id'] ?? null,
                     'space_id' => $baseCtx['space_id'] ?? null,
+                    'folder_id' => $baseCtx['folder_id'] ?? null,
                 ],
                 'active_materials_count' => $activeCount,
                 'source_counts' => [
@@ -1362,9 +1417,33 @@ class ChatController extends Controller
         $personalMaterialIds = collect($attachedMaterialRefs)->where('source', 'personal')->pluck('material_id')->values()->all();
         $subjectMaterialIds = collect($attachedMaterialRefs)->where('source', 'subject')->pluck('material_id')->values()->all();
         $spaceMaterialIds = collect($attachedMaterialRefs)->where('source', 'space')->pluck('material_id')->values()->all();
+        $scopeSpaceMaterialIds = [];
+        $effectiveFolder = $folder;
+
+        if ($contextType === 'space' && $space && !$effectiveFolder && $chat->space_folder_id) {
+            $effectiveFolder = SpaceFolder::query()
+                ->where('id', (int) $chat->space_folder_id)
+                ->where('study_space_id', $space->id)
+                ->where('user_id', $userId)
+                ->first();
+        }
+
         [$scopeSubjectMaterialIds, $scopeMaterials] = $contextType === 'uc'
             ? $this->buildUcMaterialScope($subject, $section)
             : [[], []];
+
+        if ($contextType === 'space') {
+            [$scopeSpaceMaterialIds, $scopeMaterials] = $this->buildSpaceMaterialScope($space, $effectiveFolder, $userId);
+
+            Log::info('[TUTS][Chat][SpaceScope] scope material count resolved', [
+                'chat_id' => $chatId,
+                'message_id' => $userMessageId,
+                'space_id' => $space?->id,
+                'folder_id' => $effectiveFolder?->id,
+                'scope_space_material_count' => count($scopeSpaceMaterialIds),
+                'scope_materials_count' => count($scopeMaterials),
+            ]);
+        }
 
         Log::info('[TUTS][ChatScope] scope material count resolved', [
             'context_type' => $contextType,
@@ -1391,10 +1470,12 @@ class ChatController extends Controller
             $subject,
             $section,
             $space,
+            $effectiveFolder,
             $attachedMaterialRefs,
             $personalMaterialIds,
             $subjectMaterialIds,
             $spaceMaterialIds,
+            $scopeSpaceMaterialIds,
             $scopeSubjectMaterialIds,
             $scopeMaterials,
             $requestId,
@@ -1440,7 +1521,9 @@ class ChatController extends Controller
                 $subjectMaterialIds,
                 $spaceMaterialIds,
                 $scopeSubjectMaterialIds,
-                $scopeMaterials
+                $scopeMaterials,
+                $effectiveFolder,
+                $scopeSpaceMaterialIds
             );
 
             [$personalFiles, $personalFileRefs, $personalTempPaths] = $this->preparePersonalFilesForRag(
