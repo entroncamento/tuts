@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\PersonalMaterial;
+use App\Models\SpaceMaterialLink;
 use App\Services\PersonalMaterialStorageService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -235,6 +236,25 @@ class PersonalMaterialController extends Controller
     public function destroy(PersonalMaterial $material): JsonResponse
     {
         $this->authorizeMaterial($material);
+
+        $linksCount = SpaceMaterialLink::query()
+            ->where('material_type', SpaceMaterialLink::TYPE_PERSONAL)
+            ->where('material_id', $material->id)
+            ->count();
+
+        if ($linksCount > 0) {
+            Log::info('[TUTS][PersonalMaterials] delete blocked because material is linked to spaces', [
+                'user_id' => $this->userId(),
+                'material_id' => $material->id,
+                'links_count' => $linksCount,
+            ]);
+
+            return response()->json([
+                'status' => 'erro',
+                'message' => 'Este material está associado a espaços. Remove-o dos espaços antes de o apagar.',
+                'links_count' => $linksCount,
+            ], 409);
+        }
 
         Log::info('[TUTS][PersonalMaterials] delete requested', [
             'user_id' => $this->userId(),

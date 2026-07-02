@@ -531,13 +531,24 @@ class ChatController extends Controller
             ])
             ->keyBy('id');
 
-        $linkedScopeMaterials = $links
+        $validLinks = $links
+            ->filter(fn (SpaceMaterialLink $link) => $personalMaterials->has($link->material_id))
+            ->values();
+
+        $brokenLinksCount = $links->count() - $validLinks->count();
+
+        if ($brokenLinksCount > 0) {
+            Log::warning('[TUTS][Chat][SpaceScope] skipped broken space material links', [
+                'space_id' => $space->id,
+                'folder_id' => $folder?->id,
+                'user_id' => $userId,
+                'broken_links_count' => $brokenLinksCount,
+            ]);
+        }
+
+        $linkedScopeMaterials = $validLinks
             ->map(function (SpaceMaterialLink $link) use ($personalMaterials) {
                 $material = $personalMaterials->get($link->material_id);
-
-                if (!$material) {
-                    return null;
-                }
 
                 $ragMaterialId = $link->ragMaterialId();
 
@@ -566,7 +577,7 @@ class ChatController extends Controller
             ->all();
 
         return [
-            $links->map(fn (SpaceMaterialLink $link) => $link->ragMaterialId())
+            $validLinks->map(fn (SpaceMaterialLink $link) => $link->ragMaterialId())
                 ->concat($legacyMaterials->pluck('id'))
                 ->map(fn ($id) => (int) $id)
                 ->values()
