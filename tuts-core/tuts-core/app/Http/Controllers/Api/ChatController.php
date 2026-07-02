@@ -8,6 +8,7 @@ use App\Models\Message;
 use App\Models\PersonalMaterial;
 use App\Models\SpaceFolder;
 use App\Models\SpaceMaterial;
+use App\Models\SpaceMaterialLink;
 use App\Models\StudySpace;
 use App\Models\Subject;
 use App\Models\SubjectMaterial;
@@ -458,19 +459,30 @@ class ChatController extends Controller
             return [[], []];
         }
 
-        $query = SpaceMaterial::query()
+        $legacyQuery = SpaceMaterial::query()
             ->where('study_space_id', $space->id)
             ->where('user_id', $userId)
             ->orderBy('id');
 
+        $linkQuery = SpaceMaterialLink::query()
+            ->where('study_space_id', $space->id)
+            ->where('added_by', $userId)
+            ->where('material_type', SpaceMaterialLink::TYPE_PERSONAL)
+            ->orderBy('id');
+
         if ($folder) {
-            $query->where(function ($q) use ($folder) {
+            $legacyQuery->where(function ($q) use ($folder) {
+                $q->where('space_folder_id', $folder->id)
+                    ->orWhereNull('space_folder_id');
+            });
+
+            $linkQuery->where(function ($q) use ($folder) {
                 $q->where('space_folder_id', $folder->id)
                     ->orWhereNull('space_folder_id');
             });
         }
 
-        $materials = $query->get([
+        $legacyMaterials = $legacyQuery->get([
             'id',
             'study_space_id',
             'space_folder_id',
@@ -480,10 +492,14 @@ class ChatController extends Controller
             'size_bytes',
         ]);
 
-        $scopeMaterials = $materials
+        $legacyScopeMaterials = $legacyMaterials
             ->map(fn (SpaceMaterial $material) => [
                 'id' => (int) $material->id,
+                'material_id' => (int) $material->id,
+                'material_type' => 'legacy_space',
                 'title' => (string) $material->original_name,
+                'name' => (string) $material->original_name,
+                'original_name' => (string) $material->original_name,
                 'filename' => (string) $material->original_name,
                 'space_id' => (int) $material->study_space_id,
                 'folder_id' => $material->space_folder_id ? (int) $material->space_folder_id : null,
@@ -495,9 +511,78 @@ class ChatController extends Controller
             ->values()
             ->all();
 
+        $links = $linkQuery->get([
+            'id',
+            'study_space_id',
+            'space_folder_id',
+            'material_type',
+            'material_id',
+        ]);
+
+        $personalMaterials = PersonalMaterial::query()
+            ->whereIn('id', $links->pluck('material_id')->unique()->values())
+            ->where('owner_id', $userId)
+            ->get([
+                'id',
+                'original_name',
+                'mime_type',
+                'extension',
+                'size_bytes',
+            ])
+            ->keyBy('id');
+
+        $validLinks = $links
+            ->filter(fn (SpaceMaterialLink $link) => $personalMaterials->has($link->material_id))
+            ->values();
+
+        $brokenLinksCount = $links->count() - $validLinks->count();
+
+        if ($brokenLinksCount > 0) {
+            Log::warning('[TUTS][Chat][SpaceScope] skipped broken space material links', [
+                'space_id' => $space->id,
+                'folder_id' => $folder?->id,
+                'user_id' => $userId,
+                'broken_links_count' => $brokenLinksCount,
+            ]);
+        }
+
+        $linkedScopeMaterials = $validLinks
+            ->map(function (SpaceMaterialLink $link) use ($personalMaterials) {
+                $material = $personalMaterials->get($link->material_id);
+
+                $ragMaterialId = $link->ragMaterialId();
+
+                return [
+                    'id' => $ragMaterialId,
+                    'material_id' => $ragMaterialId,
+                    'material_type' => 'space_link',
+                    'source' => 'space',
+                    'link_id' => (int) $link->id,
+                    'rag_material_id' => $ragMaterialId,
+                    'canonical_material_type' => SpaceMaterialLink::TYPE_PERSONAL,
+                    'canonical_material_id' => (int) $material->id,
+                    'space_id' => (int) $link->study_space_id,
+                    'folder_id' => $link->space_folder_id ? (int) $link->space_folder_id : null,
+                    'title' => (string) $material->original_name,
+                    'name' => (string) $material->original_name,
+                    'original_name' => (string) $material->original_name,
+                    'filename' => (string) $material->original_name,
+                    'mime_type' => $material->mime_type,
+                    'extension' => $material->extension,
+                    'size_bytes' => (int) $material->size_bytes,
+                ];
+            })
+            ->filter()
+            ->values()
+            ->all();
+
         return [
-            $materials->pluck('id')->map(fn ($id) => (int) $id)->values()->all(),
-            $scopeMaterials,
+            $validLinks->map(fn (SpaceMaterialLink $link) => $link->ragMaterialId())
+                ->concat($legacyMaterials->pluck('id'))
+                ->map(fn ($id) => (int) $id)
+                ->values()
+                ->all(),
+            collect($linkedScopeMaterials)->concat($legacyScopeMaterials)->values()->all(),
         ];
     }
 

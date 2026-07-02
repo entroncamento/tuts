@@ -4,12 +4,12 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\PersonalMaterial;
+use App\Models\SpaceMaterialLink;
+use App\Services\PersonalMaterialStorageService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
-use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -66,7 +66,7 @@ class PersonalMaterialController extends Controller
         ]);
     }
 
-    public function store(Request $request): JsonResponse
+    public function store(Request $request, PersonalMaterialStorageService $storage): JsonResponse
     {
         $userId = $this->userId();
 
@@ -84,7 +84,6 @@ class PersonalMaterialController extends Controller
             ],
         ]);
 
-        /** @var UploadedFile $file */
         $file = $validated['file'];
         $sizeBytes = (int) ($file->getSize() ?: 0);
         $extension = strtolower((string) $file->getClientOriginalExtension());
@@ -105,37 +104,8 @@ class PersonalMaterialController extends Controller
             ], 422);
         }
 
-        $originalName = basename((string) $file->getClientOriginalName());
-        $safeFilename = $this->safeFilename($originalName, $extension);
-        $storageKey = 'personal/users/' . $userId . '/' . Str::uuid() . '-' . $safeFilename;
-        $disk = Storage::disk('r2');
-        $fileStream = null;
-
         try {
-            $fileStream = fopen($file->getRealPath(), 'rb');
-
-            if ($fileStream === false) {
-                throw new \RuntimeException('Unable to open uploaded file stream.');
-            }
-
-            $stored = $disk->put($storageKey, $fileStream);
-
-            if (!$stored) {
-                throw new \RuntimeException('R2 write returned false.');
-            }
-
-            $material = DB::transaction(function () use ($userId, $originalName, $mimeType, $extension, $sizeBytes, $storageKey) {
-                return PersonalMaterial::create([
-                    'owner_id' => $userId,
-                    'uploaded_by' => $userId,
-                    'original_name' => $originalName,
-                    'mime_type' => $mimeType,
-                    'extension' => $extension,
-                    'size_bytes' => $sizeBytes,
-                    'storage_disk' => 'r2',
-                    'storage_key' => $storageKey,
-                ]);
-            });
+            $material = $storage->createFromUpload($userId, $file);
         } catch (\Throwable $exception) {
             Log::warning('[TUTS][PersonalMaterials] upload failed', [
                 'user_id' => $userId,
@@ -144,24 +114,9 @@ class PersonalMaterialController extends Controller
                 'exception' => $exception::class,
             ]);
 
-            try {
-                if ($storageKey !== '' && $disk->exists($storageKey)) {
-                    $disk->delete($storageKey);
-                }
-            } catch (\Throwable $cleanupException) {
-                Log::warning('[TUTS][PersonalMaterials] upload cleanup failed', [
-                    'user_id' => $userId,
-                    'exception' => $cleanupException::class,
-                ]);
-            }
-
             return response()->json([
                 'message' => 'Failed to upload material.',
             ], 500);
-        } finally {
-            if (is_resource($fileStream)) {
-                fclose($fileStream);
-            }
         }
 
         Log::info('[TUTS][PersonalMaterials] upload stored', [
@@ -282,6 +237,25 @@ class PersonalMaterialController extends Controller
     {
         $this->authorizeMaterial($material);
 
+        $linksCount = SpaceMaterialLink::query()
+            ->where('material_type', SpaceMaterialLink::TYPE_PERSONAL)
+            ->where('material_id', $material->id)
+            ->count();
+
+        if ($linksCount > 0) {
+            Log::info('[TUTS][PersonalMaterials] delete blocked because material is linked to spaces', [
+                'user_id' => $this->userId(),
+                'material_id' => $material->id,
+                'links_count' => $linksCount,
+            ]);
+
+            return response()->json([
+                'status' => 'erro',
+                'message' => 'Este material está associado a espaços. Remove-o dos espaços antes de o apagar.',
+                'links_count' => $linksCount,
+            ], 409);
+        }
+
         Log::info('[TUTS][PersonalMaterials] delete requested', [
             'user_id' => $this->userId(),
             'material_id' => $material->id,
@@ -363,18 +337,6 @@ class PersonalMaterialController extends Controller
         return (int) PersonalMaterial::query()
             ->where('owner_id', $userId)
             ->sum('size_bytes');
-    }
-
-    private function safeFilename(string $filename, string $extension): string
-    {
-        $name = pathinfo($filename, PATHINFO_FILENAME);
-        $slug = Str::slug($name);
-
-        if ($slug === '') {
-            $slug = 'material';
-        }
-
-        return $slug . '.' . $extension;
     }
 
     private function humanSize(int $bytes): string
