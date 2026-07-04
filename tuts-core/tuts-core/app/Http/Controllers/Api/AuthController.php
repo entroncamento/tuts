@@ -156,6 +156,7 @@ class AuthController extends Controller
                 'name'  => $user->name,
                 'email' => $user->email,
                 'role'  => $user->role,
+                'onboarding_completed_at' => $user->onboarding_completed_at,
             ],
         ]);
     }
@@ -189,6 +190,34 @@ class AuthController extends Controller
                 'name'  => $user->name,
                 'email' => $user->email,
                 'role'  => $user->role,
+                'onboarding_completed_at' => $user->onboarding_completed_at,
+            ],
+        ]);
+    }
+
+    /**
+     * Persiste a conclusão do onboarding apenas para o utilizador autenticado.
+     */
+    public function completeOnboarding(Request $request)
+    {
+        /** @var \App\Models\User $user */
+        $user = $request->user();
+
+        if ($user->onboarding_completed_at === null) {
+            $user->update([
+                'onboarding_completed_at' => now(),
+            ]);
+        }
+
+        return response()->json([
+            'status' => 'sucesso',
+            'message' => 'Onboarding marcado como concluído.',
+            'user' => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+                'role' => $user->role,
+                'onboarding_completed_at' => $user->onboarding_completed_at,
             ],
         ]);
     }

@@ -29,6 +29,7 @@ Route::post('/api/login', [AuthController::class, 'login'])
 Route::middleware('auth')->group(function () {
     Route::post('/api/logout', [AuthController::class, 'logout']);
     Route::get('/api/me', [AuthController::class, 'me']);
+    Route::post('/api/me/onboarding/complete', [AuthController::class, 'completeOnboarding']);
 
     Route::prefix('api/me/materials')->group(function () {
         Route::get('/', [PersonalMaterialController::class, 'index']);

@@ -21,6 +21,7 @@ class User extends Authenticatable implements MustVerifyEmail
         'password',
         'course_id',
         'role', // ADICIONADO: Obrigatório para o User::create() no Controller funcionar
+        'onboarding_completed_at',
     ];
 
     protected $hidden = [
@@ -32,6 +33,7 @@ class User extends Authenticatable implements MustVerifyEmail
     {
         return [
             'email_verified_at' => 'datetime',
+            'onboarding_completed_at' => 'datetime',
             'password'          => 'hashed',
         ];
     }
