@@ -4,7 +4,25 @@ use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\InternalMessageController;
 use App\Http\Controllers\Api\HealthController;
 use App\Http\Controllers\Api\StudyPlanController;
+use App\Http\Controllers\Api\MobileAuthController;
 use Illuminate\Support\Facades\Route;
+
+/*
+|--------------------------------------------------------------------------
+| API: Rotas de Autenticação Móvel (Fase 2A)
+|--------------------------------------------------------------------------
+*/
+Route::prefix('mobile')->group(function () {
+    Route::post('/login', [MobileAuthController::class, 'login'])
+        ->middleware('throttle:5,1');
+    Route::post('/register', [MobileAuthController::class, 'register'])
+        ->middleware('throttle:5,1');
+
+    Route::middleware('auth:sanctum')->group(function () {
+        Route::get('/me', [MobileAuthController::class, 'me']);
+        Route::post('/logout', [MobileAuthController::class, 'logout']);
+    });
+});
 
 /*
 |--------------------------------------------------------------------------
