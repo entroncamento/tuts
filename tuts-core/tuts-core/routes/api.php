@@ -21,6 +21,7 @@ Route::prefix('mobile')->group(function () {
     Route::middleware('auth:sanctum')->group(function () {
         Route::get('/me', [MobileAuthController::class, 'me']);
         Route::post('/logout', [MobileAuthController::class, 'logout']);
+        Route::post('/me/onboarding/complete', [\App\Http\Controllers\Api\AuthController::class, 'completeOnboarding']);
     });
 });
 
