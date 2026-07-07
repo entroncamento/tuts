@@ -22,6 +22,38 @@ Route::prefix('mobile')->group(function () {
         Route::get('/me', [MobileAuthController::class, 'me']);
         Route::post('/logout', [MobileAuthController::class, 'logout']);
         Route::post('/me/onboarding/complete', [\App\Http\Controllers\Api\AuthController::class, 'completeOnboarding']);
+
+        // Chat mobile aliases
+        Route::post('/chat', [\App\Http\Controllers\Api\ChatController::class, 'criarChat']);
+        Route::post('/chat/stream', [\App\Http\Controllers\Api\ChatController::class, 'enviarPerguntaStream']);
+        Route::delete('/chat/{chat}', [\App\Http\Controllers\Api\ChatController::class, 'destroy']);
+
+        // Notifications mobile aliases
+        Route::match(['POST', 'PATCH'], '/notifications/read-all', [\App\Http\Controllers\Api\NotificationController::class, 'markAllAsRead']);
+        Route::match(['POST', 'PATCH'], '/notifications/{notification}/read', [\App\Http\Controllers\Api\NotificationController::class, 'markAsRead']);
+        Route::delete('/notifications/{notification}', [\App\Http\Controllers\Api\NotificationController::class, 'destroy']);
+
+        // Availability Blocks mobile aliases
+        Route::post('/availability-blocks', [\App\Http\Controllers\Api\AvailabilityBlockController::class, 'store']);
+        Route::match(['POST', 'PATCH', 'PUT'], '/availability-blocks/{block}', [\App\Http\Controllers\Api\AvailabilityBlockController::class, 'update']);
+        Route::delete('/availability-blocks/{block}', [\App\Http\Controllers\Api\AvailabilityBlockController::class, 'destroy']);
+
+        // Reminders mobile aliases
+        Route::post('/reminders', [\App\Http\Controllers\Api\ReminderController::class, 'store']);
+        Route::match(['POST', 'PATCH'], '/reminders/{reminder}/complete', [\App\Http\Controllers\Api\ReminderController::class, 'complete']);
+        Route::delete('/reminders/{reminder}', [\App\Http\Controllers\Api\ReminderController::class, 'destroy']);
+
+        // Subjects Join mobile alias
+        Route::post('/subjects/join', [\App\Http\Controllers\Api\SubjectController::class, 'join']);
+
+        // Calendar Items mobile aliases
+        Route::post('/calendar/items', [\App\Http\Controllers\Api\CalendarItemController::class, 'store']);
+        Route::match(['POST', 'PATCH', 'PUT'], '/calendar/items/{item}', [\App\Http\Controllers\Api\CalendarItemController::class, 'update']);
+        Route::delete('/calendar/items/{item}', [\App\Http\Controllers\Api\CalendarItemController::class, 'destroy']);
+
+        // Personal Materials mobile aliases
+        Route::post('/me/materials', [\App\Http\Controllers\Api\PersonalMaterialController::class, 'store']);
+        Route::delete('/me/materials/{material}', [\App\Http\Controllers\Api\PersonalMaterialController::class, 'destroy']);
     });
 });
 
