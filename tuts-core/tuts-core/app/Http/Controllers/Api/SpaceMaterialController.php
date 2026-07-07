@@ -206,6 +206,89 @@ class SpaceMaterialController extends Controller
         ], 201);
     }
 
+    public function linkPersonal(Request $request, StudySpace $space, RagIngestionService $ragIngestion): JsonResponse
+    {
+        $this->authorizeSpace($space);
+
+        $validated = $request->validate([
+            'personal_material_id' => 'required|integer|exists:personal_materials,id',
+            'notes' => 'nullable|string|max:1000',
+        ]);
+
+        $userId = $this->userId();
+
+        $material = PersonalMaterial::query()
+            ->where('id', $validated['personal_material_id'])
+            ->where('owner_id', $userId)
+            ->first();
+
+        abort_unless($material, 404);
+
+        $notesProvided = array_key_exists('notes', $validated);
+
+        [$link, $created] = DB::transaction(function () use ($space, $material, $userId, $validated, $notesProvided) {
+            $link = SpaceMaterialLink::query()
+                ->where('study_space_id', $space->id)
+                ->whereNull('space_folder_id')
+                ->where('material_type', SpaceMaterialLink::TYPE_PERSONAL)
+                ->where('material_id', $material->id)
+                ->where('added_by', $userId)
+                ->lockForUpdate()
+                ->first();
+
+            if ($link) {
+                if ($notesProvided) {
+                    $link->update([
+                        'notes' => $validated['notes'] ?? null,
+                    ]);
+                }
+
+                return [$link->fresh(), false];
+            }
+
+            $link = SpaceMaterialLink::create([
+                'study_space_id' => $space->id,
+                'space_folder_id' => null,
+                'material_type' => SpaceMaterialLink::TYPE_PERSONAL,
+                'material_id' => $material->id,
+                'added_by' => $userId,
+                'notes' => $validated['notes'] ?? null,
+            ]);
+
+            return [$link, true];
+        });
+
+        $space->touch();
+
+        try {
+            $ragResult = $ragIngestion->ingestSpaceMaterialLink($link->load('studySpace'));
+        } catch (\Throwable $exception) {
+            Log::error('[TUTS][SpaceMaterials][RAG] Ingestion crashed during personal material link', [
+                'link_id' => $link->id,
+                'material_id' => $material->id,
+                'space_id' => $space->id,
+                'exception_class' => $exception::class,
+                'exception_message' => $exception->getMessage(),
+            ]);
+
+            $ragResult = [
+                'status' => 'failed',
+                'message' => 'Material guardado, mas ocorreu um erro ao comunicar com o RAG.',
+                'reason' => 'ingestion_crash',
+            ];
+        }
+
+        return response()->json([
+            'status' => 'sucesso',
+            'material' => $this->formatLinkedMaterial($space, $link->load('folder'), $material),
+            'rag_ingestion' => [
+                'status' => $ragResult['status'] ?? 'failed',
+                'message' => $ragResult['message'] ?? 'Material guardado, mas ainda nao ficou pesquisavel pelo RAG.',
+                'reason' => $ragResult['reason'] ?? null,
+            ],
+        ], $created ? 201 : 200);
+    }
+
     public function moveToFolder(Request $request, StudySpace $space, string $material): JsonResponse
     {
         $validated = $request->validate([

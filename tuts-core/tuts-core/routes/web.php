@@ -120,6 +120,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
         Route::get('/{space}/materials', [SpaceMaterialController::class, 'index']);
         Route::post('/{space}/materials', [SpaceMaterialController::class, 'store'])->middleware('throttle:20,1');
+        Route::post('/{space}/materials/link-personal', [SpaceMaterialController::class, 'linkPersonal'])->middleware('throttle:20,1');
         Route::patch('/{space}/materials/{material}/folder', [SpaceMaterialController::class, 'moveToFolder']);
         Route::get('/{space}/materials/{material}/download', [SpaceMaterialController::class, 'download']);
         Route::get('/{space}/materials/{material}/view', [SpaceMaterialController::class, 'view']);
